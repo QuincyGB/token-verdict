@@ -90,7 +90,7 @@ per call on Base (`{settings.network}`) via the x402 protocol — no API key nee
 `POST {base_url}/v1/verdict`
 
 Body (JSON):
-- `address` (required): token contract address, e.g. `0x4200000000000000000000000000000000000042`
+- `address` (required): token contract address, e.g. `0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b`
 - `chain` (optional, default `base`): `base` | `ethereum` | `solana`
 
 Returns: `verdict` (SOLID / CAUTION / DANGER), `score` (0-100), `signals`

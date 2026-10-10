@@ -158,6 +158,28 @@ def score_signals(signals: list[dict]) -> tuple[float, str]:
     return score, verdict
 
 
+def market_activity(pair: dict) -> tuple[float, int]:
+    """(24h volume USD, 24h transaction count) for a pair."""
+    vol24 = _num((pair.get("volume") or {}).get("h24"))
+    txns = (pair.get("txns") or {}).get("h24") or {}
+    total = int(txns.get("buys") or 0) + int(txns.get("sells") or 0)
+    return vol24, total
+
+
+def apply_dead_market_guard(score: float, verdict: str, pair: dict) -> tuple[float, str]:
+    """A market nobody is trading is never SOLID, however deep its liquidity.
+
+    A pair can sit on six figures of parked liquidity with zero volume and
+    three transactions a day — that is a dormant book, not a healthy market,
+    and an agent told "SOLID, size normally" would be walking into a market
+    with no live exit. Floor such verdicts at CAUTION (score 35).
+    """
+    vol24, total = market_activity(pair)
+    if verdict == "SOLID" and vol24 < 1_000 and total < 20:
+        return max(score, 35.0), "CAUTION"
+    return score, verdict
+
+
 def _fmt_usd(v: float) -> str:
     if v >= 1_000_000:
         return f"${v/1_000_000:.2f}M"
@@ -181,7 +203,7 @@ def write_take(symbol: str, name: str, pair: dict, signals: list[dict],
         f"{symbol} ({name}) trades at ${price} on {dex} with {_fmt_usd(liq)} in liquidity."
     ]
     if verdict == "SOLID":
-        reassure = "; ".join(s["detail"] for s in calms[:2])
+        reassure = "; ".join(s["detail"].rstrip(".") for s in calms[:2])
         if reassure:
             parts.append(f"On the positive side: {reassure}.")
         if flags:
@@ -191,9 +213,20 @@ def write_take(symbol: str, name: str, pair: dict, signals: list[dict],
             "Size normally, but this is market data, not financial advice."
         )
     elif verdict == "CAUTION":
+        vol24, total = market_activity(pair)
+        if vol24 < 1_000 and total < 20:
+            parts.append(
+                f"Trading has effectively stopped — {_fmt_usd(vol24)} of volume "
+                f"across {total} transactions in 24h — so this is a dormant "
+                "book, not a live market, whatever the liquidity figure says."
+            )
+        else:
+            worst = "; ".join(s["detail"].rstrip(".") for s in flags[:2])
+            if worst:
+                parts.append(f"The flags: {worst}.")
         parts.append(
-            "Verdict: CAUTION — tradable, but the flags above are real. "
-            "Keep size small and don't chase green candles."
+            "Verdict: CAUTION — tradable at most in small size, and the "
+            "signals above are why. Don't chase green candles."
         )
     else:
         parts.append(
@@ -217,6 +250,7 @@ async def analyze(address: str, chain: str = "base") -> dict:
     name = base_token.get("name", "Unknown")
     signals = compute_signals(pair)
     score, verdict = score_signals(signals)
+    score, verdict = apply_dead_market_guard(score, verdict, pair)
     return {
         "token": {"address": address, "symbol": symbol, "name": name, "chain": chain},
         "verdict": verdict,
