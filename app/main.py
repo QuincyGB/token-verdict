@@ -1,12 +1,16 @@
 """Token Verdict — x402 pay-per-call token risk analysis API.
 
 Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base)
-Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt
+Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
+        /example (one verdict end to end, for humans)
 """
 
 from __future__ import annotations
 
+import html
+import json
 import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -171,11 +175,17 @@ pay-to wallet). Pay $0.02 USDC on Base with any x402 v2 client, retry with
 the payment header, and the verdict comes back. There is no signup and no
 key to manage — the settlement is the credential.</p>
 
+<p><strong>Worked example:</strong> <a href="/example">one complete verdict,
+step by step</a> — discovery, the request, the real 402 challenge, the
+payment, and the response.</p>
+
 <h2>Endpoints</h2>
 <table>
   <tr><th>Route</th><th>Price</th><th>Purpose</th></tr>
   <tr><td><code>POST /v1/verdict</code></td><td>$0.02</td>
       <td>Token risk verdict (paid, x402)</td></tr>
+  <tr><td><code>GET /example</code></td><td>free</td>
+      <td>One verdict end to end — worked example for humans</td></tr>
   <tr><td><code>GET /quote</code></td><td>free</td>
       <td>Price, asset, network, pay-to wallet</td></tr>
   <tr><td><code>GET /.well-known/x402</code></td><td>free</td>
@@ -204,6 +214,246 @@ data, not financial advice.
 </body>
 </html>
 """
+
+
+# --- /example: one verdict, end to end (for humans) ---------------------------
+# The 402 challenge rendered here is the REAL challenge this service returns:
+# resource + accepts are the live payment terms (same values as the capture
+# saved on 2026-10-09 and re-verified against a live unpaid call on
+# 2026-10-10). The single disclosed edit: the Bazaar extension's sample
+# *output* is elided, because a sample verdict is exactly what this page
+# refuses to publish.
+#
+# The verdict section is populated ONLY from a real paid capture: drop a
+# verbatim paid response at app/example_verdict.json and it renders as-is.
+# Until then the section states, plainly, that it is awaiting that capture.
+# No mock verdicts, ever — a risk product faking its own example would be
+# the story, not the demo.
+
+_EXAMPLE_TOKEN = "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b"
+_USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
+
+def _load_example_verdict() -> dict | None:
+    path = os.path.join(os.path.dirname(__file__), "example_verdict.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and "verdict" in data and "signals" in data:
+            return data
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+_EXAMPLE_VERDICT = _load_example_verdict()
+
+
+def _example_challenge() -> dict:
+    return {
+        "x402Version": 2,
+        "error": "Payment required",
+        "resource": {
+            "url": "https://token-verdict-production.up.railway.app/v1/verdict",
+            "description": VERDICT_DESCRIPTION,
+            "mimeType": "application/json",
+            "serviceName": "token-verdict",
+            "tags": ["tokens", "defi", "risk", "research", "agents"],
+        },
+        "accepts": [
+            {
+                "scheme": "exact",
+                "network": settings.network,
+                "asset": _USDC_BASE,
+                "amount": "20000",
+                "payTo": settings.pay_to,
+                "maxTimeoutSeconds": 300,
+                "extra": {"name": "USD Coin", "version": "2"},
+            }
+        ],
+        "extensions": {
+            "bazaar": {
+                "info": {
+                    "input": {
+                        "type": "http",
+                        "method": "POST",
+                        "bodyType": "json",
+                        "body": {"address": _EXAMPLE_TOKEN, "chain": "base"},
+                    },
+                    "output": {
+                        "type": "application/json",
+                        "example": "… (elided — see step 4: this page publishes only real captured verdicts)",
+                    },
+                },
+                "schema": {
+                    "type": "object",
+                    "required": ["address"],
+                    "properties": {
+                        "address": {"type": "string"},
+                        "chain": {"type": "string"},
+                    },
+                },
+            }
+        },
+    }
+
+
+def _verdict_section() -> str:
+    v = _EXAMPLE_VERDICT
+    if v is None:
+        return """
+<h2>Step 4 — The verdict</h2>
+<div class="pending">
+<strong>Status: awaiting the first published capture.</strong> This section
+is filled by a real paid call — the exact response the service returns once
+the $0.02 settles — published here verbatim. We don't post mock verdicts: a
+risk product that fakes its own example would be the story, not the demo.
+</div>
+<p>When the payment settles, the retried call returns JSON with:</p>
+<ul>
+  <li><code>verdict</code> — SOLID, CAUTION, or DANGER</li>
+  <li><code>score</code> — risk score, 0 (safest) to 100 (riskiest)</li>
+  <li><code>signals</code> — the six market-structure signals (liquidity
+      depth, volume churn, sell pressure, price action, trader breadth,
+      pair age), each with its own score, weight, and a plain-English
+      detail line</li>
+  <li><code>take</code> — a short written analyst summary</li>
+  <li><code>market</code> — the raw market data the verdict was derived
+      from, so any caller can re-check the math</li>
+</ul>
+<p>Every step above this one is live and free right now — the manifest, the
+quote, and the 402 challenge. Only the verdict itself is paywalled, at
+$0.02.</p>
+"""
+    esc = html.escape
+    tok = v.get("token") or {}
+    sym = ""
+    if tok.get("symbol"):
+        sym = f" ({esc(str(tok['symbol']))} — {esc(str(tok.get('name', '')))})"
+    rows = []
+    for s in v.get("signals") or []:
+        rows.append(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                esc(str(s.get("name", ""))),
+                esc(str(s.get("score", ""))),
+                esc(str(s.get("weight", ""))),
+                esc(str(s.get("detail", ""))),
+            )
+        )
+    mkt = v.get("market") or {}
+    pill_cls = {
+        "SOLID": "v-solid",
+        "CAUTION": "v-caution",
+        "DANGER": "v-danger",
+    }.get(str(v.get("verdict", "")).upper(), "pill")
+    return f"""
+<h2>Step 4 — The verdict (a real paid capture)</h2>
+<p>This is the verbatim response of a real paid call for
+<code>{esc(str(tok.get('address', _EXAMPLE_TOKEN)))}</code>{sym}:</p>
+<p><span class="pill {pill_cls}">{esc(str(v.get('verdict', '')))}</span>
+<strong>Risk score: {esc(str(v.get('score', '')))} / 100</strong></p>
+<table>
+  <tr><th>Signal</th><th>Score</th><th>Weight</th><th>Detail</th></tr>
+  {''.join(rows)}
+</table>
+<p><strong>Analyst take:</strong> {esc(str(v.get('take', '')))}</p>
+<p>The market data it was derived from: price ${esc(str(mkt.get('price_usd', '')))},
+liquidity ${esc(str(mkt.get('liquidity_usd', '')))}, 24h volume
+${esc(str(mkt.get('volume_24h_usd', '')))}, 24h price change
+{esc(str(mkt.get('price_change_24h_pct', '')))}% on
+{esc(str(mkt.get('dex', '')))}. Any caller can reproduce this response —
+and re-check every number in it — for $0.02.</p>
+"""
+
+
+EXAMPLE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One verdict, end to end — Token Verdict</title>
+<meta name="description" content="A complete Token Verdict call, step by step: discovery, the request, the real HTTP 402 x402 challenge, the $0.02 payment on Base, and the verdict — published only from a real paid capture.">
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         max-width: 760px; margin: 40px auto; padding: 0 20px 60px;
+         line-height: 1.55; color: #16202a; background: #fbfcfd; }
+  h1 { font-size: 2rem; margin-bottom: .2em; }
+  .tag { font-size: 1.1rem; color: #33475b; margin-top: 0; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background: #0f1b26; color: #dcebf5; padding: 14px 16px;
+        border-radius: 8px; overflow-x: auto; font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  td, th { border-bottom: 1px solid #dde5ec; padding: 6px 8px;
+           text-align: left; vertical-align: top; }
+  .pill { display: inline-block; background: #e7f0e9; color: #1d5c33;
+          border-radius: 999px; padding: 2px 10px; font-size: .85rem; }
+  .v-solid { background: #e7f0e9; color: #1d5c33; }
+  .v-caution { background: #fdf6e5; color: #8a6d00; }
+  .v-danger { background: #fdecec; color: #8c1d2c; }
+  a { color: #0b5cad; }
+  .pending { background: #fdf6e5; border: 1px solid #ecd9a0;
+             border-radius: 8px; padding: 10px 14px; }
+</style>
+</head>
+<body>
+<h1>One verdict, end to end</h1>
+<p class="tag">Token Verdict is built for AI agents, so its
+&ldquo;interface&rdquo; is a conversation between machines. Here is that
+conversation, translated — the steps an agent runs, with the real data at
+each step.</p>
+
+<p>The scenario: an autonomous trading agent is about to buy the token at
+<code>0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b</code> on Base. Before it
+spends anything, it asks Token Verdict first.</p>
+
+<h2>Step 0 — Discovery (free)</h2>
+<p>The agent finds the service with no human involved: a machine-readable
+manifest at <a href="/.well-known/x402"><code>/.well-known/x402</code></a>,
+documentation written for agents at <a href="/skill.md"><code>/skill.md</code></a>,
+a public price quote at <a href="/quote"><code>/quote</code></a> — and a
+listing on Coinbase's Agent Bazaar (resource 21729).</p>
+
+<h2>Step 1 — The request (free)</h2>
+<pre>curl -X POST https://token-verdict-production.up.railway.app/v1/verdict \\
+  -H 'content-type: application/json' \\
+  -d '{"address":"0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b","chain":"base"}'</pre>
+<p>No account, no API key, no dashboard. The call is a token address and a
+chain — nothing else.</p>
+
+<h2>Step 2 — The 402 challenge (free)</h2>
+<p>Unpaid, the service answers <strong>HTTP 402 Payment Required</strong>,
+with the challenge carried in the <code>payment-required</code> response
+header. Decoded, it is the price tag and the payment instructions in one
+object — this is the real challenge this service returns:</p>
+<pre>__CHALLENGE_JSON__</pre>
+<p>Read it as: pay <strong>$0.02</strong> — 20,000 micro-units of USDC (the
+asset contract above) — on <strong>Base</strong> (<code>eip155:8453</code>),
+to the <code>payTo</code> wallet in the object, within 300 seconds. One
+disclosed edit: the Bazaar extension's sample <em>output</em> is elided —
+see step 4 for why.</p>
+
+<h2>Step 3 — The payment ($0.02)</h2>
+<p>Any x402 v2 client reads the challenge, signs an
+&ldquo;exact&rdquo;-scheme payment authorization from the agent's own
+wallet, and a facilitator settles it on Base. The agent then retries the
+<em>identical</em> POST with the payment proof attached. There is no login
+before or after: <strong>the payment is the authentication</strong>, and
+the settlement receipt travels back with the response.</p>
+
+__VERDICT_SECTION__
+
+<p><a href="/">&larr; Token Verdict home</a> &middot; Source:
+<a href="https://github.com/QuincyGB/token-verdict">github.com/QuincyGB/token-verdict</a></p>
+</body>
+</html>
+"""
+
+
+@app.get("/example", response_class=HTMLResponse)
+async def example():
+    challenge = html.escape(json.dumps(_example_challenge(), indent=2))
+    page = EXAMPLE_HTML.replace("__CHALLENGE_JSON__", challenge)
+    return page.replace("__VERDICT_SECTION__", _verdict_section())
 
 
 @app.get("/", response_class=HTMLResponse)
