@@ -20,7 +20,30 @@ def _price_to_units(price_usdc: str) -> str:
 
 
 def x402_manifest(settings: Settings, base_url: str) -> dict:
-    return {
+    # accepts[] mirrors the live 402 challenge so directory validators
+    # (Agent Bazaar, x402scan) accept the manifest.
+    accepts = [
+        {
+            "scheme": "exact",
+            "network": settings.network,
+            "amount": _price_to_units(settings.price_usdc),
+            "asset": USDC_ASSET,
+            "payTo": settings.pay_to,
+            "maxTimeoutSeconds": 300,
+        }
+    ]
+    if settings.solana_enabled:
+        accepts.append(
+            {
+                "scheme": "exact",
+                "network": settings.solana_network,
+                "amount": _price_to_units(settings.price_usdc),
+                "asset": settings.solana_usdc_mint,
+                "payTo": settings.solana_pay_to,
+                "maxTimeoutSeconds": 300,
+            }
+        )
+    manifest = {
         "x402Version": 2,
         "service": settings.service_name,
         "description": (
@@ -44,18 +67,7 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                     "six signals and a written take. Send a contract address."
                 ),
                 "tags": ["tokens", "defi", "risk", "research", "agents"],
-                # accepts[] mirrors the live 402 challenge so directory
-                # validators (Agent Bazaar, x402scan) accept the manifest.
-                "accepts": [
-                    {
-                        "scheme": "exact",
-                        "network": settings.network,
-                        "amount": _price_to_units(settings.price_usdc),
-                        "asset": USDC_ASSET,
-                        "payTo": settings.pay_to,
-                        "maxTimeoutSeconds": 300,
-                    }
-                ],
+                "accepts": accepts,
                 "inputSchema": {
                     "type": "object",
                     "required": ["address"],
@@ -77,13 +89,25 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
             },
         ],
     }
+    if settings.solana_enabled:
+        manifest["networks"] = [settings.network, settings.solana_network]
+    return manifest
+
+
+def _solana_note(settings: Settings) -> str:
+    if not settings.solana_enabled:
+        return ""
+    return (
+        f" Also payable in USDC on Solana mainnet (`{settings.solana_network}`) "
+        f"to `{settings.solana_pay_to}` — same price, same x402 v2 exact scheme."
+    )
 
 
 def skill_md(settings: Settings, base_url: str) -> str:
     return f"""# {settings.service_name} — token risk verdicts (x402)
 
 Send a token contract address, get a risk verdict. Pay {settings.price_usdc} USDC
-per call on Base (`{settings.network}`) via the x402 protocol — no API key needed.
+per call on Base (`{settings.network}`) via the x402 protocol — no API key needed.{_solana_note(settings)}
 
 ## Paid endpoint
 
@@ -98,7 +122,8 @@ Returns: `verdict` (SOLID / CAUTION / DANGER), `score` (0-100), `signals`
 summary), and raw `market` data (price, liquidity, volume, price change, txns).
 
 Pay with any x402 v2 client (e.g. `x402-fetch`): call the endpoint, get a 402
-challenge, sign, retry with the payment header. Settlement is USDC on Base.
+challenge, sign, retry with the payment header. Settlement is USDC on the
+network you paid on (Base, or Solana when the Solana rail is enabled).
 
 ## Free endpoints
 
@@ -115,9 +140,12 @@ looks like, not what the contract does.
 
 
 def llms_txt(settings: Settings, base_url: str) -> str:
+    networks = settings.network
+    if settings.solana_enabled:
+        networks = f"{settings.network} or {settings.solana_network} (Solana)"
     return f"""# {settings.service_name}
 
-Paid API: token risk verdicts. Price: {settings.price_usdc} USDC per call, x402 v2, network {settings.network}.
+Paid API: token risk verdicts. Price: {settings.price_usdc} USDC per call, x402 v2, network {networks}.
 
 ## Endpoints
 

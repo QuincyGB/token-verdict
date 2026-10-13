@@ -1,6 +1,7 @@
 """Token Verdict — x402 pay-per-call token risk analysis API.
 
-Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base)
+Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base;
+        Solana mainnet rail too when SOLANA_RAIL_ENABLED is set)
 Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
         /example (one verdict end to end, for humans)
 """
@@ -18,10 +19,12 @@ from pydantic import BaseModel, Field
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption, RouteConfig
 from x402.http.middleware import fastapi_payment_middleware
 from x402.mechanisms.evm.exact.server import ExactEvmScheme
+from x402.mechanisms.svm.exact.server import ExactSvmScheme as ExactSvmServerScheme
 from x402.server import x402ResourceServer
 
 from .config import load_settings
 from .discovery import llms_txt, skill_md, x402_manifest
+from .solana_rail import SvmReplayGuard, make_after_settle_hook, make_before_verify_hook
 from .verdict import TokenNotFound, analyze
 
 log = logging.getLogger("token-verdict")
@@ -37,6 +40,49 @@ log.info("facilitator: %s (%s)", settings.facilitator_url, settings.network)
 resource_server = x402ResourceServer(facilitator)
 resource_server.register(settings.network, ExactEvmScheme())
 
+# --- Solana rail (env-gated; Base behaviour is unchanged when off) ----------
+# Same facilitator: ultravioletadao's /supported lists x402 v2 exact on
+# solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp alongside eip155:8453, so the one
+# facilitator client settles both networks.
+_accepts = [
+    PaymentOption(
+        scheme="exact",
+        pay_to=settings.pay_to,
+        price=settings.price_usdc,
+        network=settings.network,
+    ),
+]
+
+if settings.solana_enabled:
+    resource_server.register(
+        settings.solana_network,
+        ExactSvmServerScheme(rpc_url=settings.solana_rpc_url),
+    )
+    _svm_replay_guard = SvmReplayGuard()
+    resource_server.on_before_verify(
+        make_before_verify_hook(
+            _svm_replay_guard,
+            solana_network=settings.solana_network,
+            usdc_mint=settings.solana_usdc_mint,
+        )
+    )
+    resource_server.on_after_settle(
+        make_after_settle_hook(_svm_replay_guard, solana_network=settings.solana_network)
+    )
+    _accepts.append(
+        PaymentOption(
+            scheme="exact",
+            pay_to=settings.solana_pay_to,
+            price=settings.price_usdc,
+            network=settings.solana_network,
+        )
+    )
+    log.info(
+        "solana rail enabled: %s payTo %s",
+        settings.solana_network,
+        settings.solana_pay_to,
+    )
+
 VERDICT_DESCRIPTION = (
     "Send a token contract address, get a risk verdict. Returns SOLID / "
     "CAUTION / DANGER with a 0-100 score, six weighted market-structure "
@@ -47,14 +93,7 @@ VERDICT_DESCRIPTION = (
 
 routes = {
     "POST /v1/verdict": RouteConfig(
-        accepts=[
-            PaymentOption(
-                scheme="exact",
-                pay_to=settings.pay_to,
-                price=settings.price_usdc,
-                network=settings.network,
-            ),
-        ],
+        accepts=_accepts,
         description=VERDICT_DESCRIPTION,
         mime_type="application/json",
         service_name=settings.service_name,  # ≤32 chars, forwarded to Bazaar
@@ -469,7 +508,7 @@ async def health():
 @app.get("/quote")
 async def quote():
     """Free: what the paid endpoint costs and where it settles."""
-    return {
+    body = {
         "service": settings.service_name,
         "endpoint": "/v1/verdict",
         "price": settings.price_usdc,
@@ -478,6 +517,20 @@ async def quote():
         "payTo": settings.pay_to,
         "protocol": "x402 v2 (exact scheme)",
     }
+    if settings.solana_enabled:
+        body["rails"] = [
+            {
+                "network": settings.network,
+                "payTo": settings.pay_to,
+                "asset": "USDC",
+            },
+            {
+                "network": settings.solana_network,
+                "payTo": settings.solana_pay_to,
+                "asset": settings.solana_usdc_mint,
+            },
+        ]
+    return body
 
 
 @app.get("/.well-known/x402")
