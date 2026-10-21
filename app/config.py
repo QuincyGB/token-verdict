@@ -25,6 +25,12 @@ SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 # serves eip155:8453 (Base) and eip155:5042 (Arc) with the exact scheme.
 FACILITATOR_URL = "https://facilitator.ultravioletadao.xyz"
 
+# PayAI public x402 facilitator (no keys for the exact scheme). Verified via
+# /supported 2026-10-21: serves x402 v2 exact on eip155:8453 (Base). Settling
+# through it catalogs this service in the PayAI index — each facilitator's
+# catalog indexes only its own settlements.
+PAYAI_FACILITATOR_URL = "https://facilitator.payai.network"
+
 # DEXScreener free API (no key) — token market data.
 DEXSCREENER_API = "https://api.dexscreener.com"
 
@@ -44,10 +50,33 @@ class Settings:
     solana_network: str = SOLANA_MAINNET
     solana_usdc_mint: str = SOLANA_USDC_MINT
     solana_rpc_url: str | None = None  # optional: adds blockhash hints to 402s
+    # Coinbase CDP facilitator credentials (optional). Only used when
+    # X402_FACILITATOR_URL points at CDP — see use_cdp below.
+    cdp_api_key_id: str | None = None
+    cdp_api_key_secret: str | None = None
     # RapidAPI gateway shared secret (optional). Only used to gate the
     # /v1/verdict/rapidapi route; unset = route disabled. See
     # rapidapi-bypass-spec (platform-signups pack).
     rapidapi_proxy_secret: str | None = None
+
+    @property
+    def use_cdp(self) -> bool:
+        """True when settlements should run through the CDP facilitator
+        with JWT auth — the path that feeds the CDP Bazaar catalog. Requires
+        BOTH the CDP facilitator URL and API keys; otherwise the keyless
+        public facilitator path runs unchanged."""
+        return (
+            "api.cdp.coinbase.com" in self.facilitator_url
+            and bool(self.cdp_api_key_id)
+            and bool(self.cdp_api_key_secret)
+        )
+
+    @property
+    def use_payai(self) -> bool:
+        """True when settlements run through the PayAI facilitator — the
+        path that feeds the PayAI index catalog. No API key is needed for
+        the exact scheme, so the URL alone selects it."""
+        return "facilitator.payai.network" in self.facilitator_url
 
 
 def _truthy(value: str | None) -> bool:
@@ -72,6 +101,11 @@ def load_settings() -> Settings:
         if not validate_svm_address(solana_pay_to):
             raise RuntimeError(f"X402_SOLANA_PAY_TO is not a valid Solana address: {solana_pay_to!r}")
 
+    cdp_keys = {
+        k: (os.environ.get(k, "").strip() or None)
+        for k in ("CDP_API_KEY_ID", "CDP_API_KEY_SECRET")
+    }
+
     rapidapi_proxy_secret = os.environ.get("RAPIDAPI_PROXY_SECRET", "").strip() or None
 
     return Settings(
@@ -88,4 +122,5 @@ def load_settings() -> Settings:
         solana_usdc_mint=os.environ.get("X402_SOLANA_USDC_MINT", SOLANA_USDC_MINT).strip(),
         solana_rpc_url=os.environ.get("SOLANA_RPC_URL", "").strip() or None,
         rapidapi_proxy_secret=rapidapi_proxy_secret,
+        **{k.lower(): v for k, v in cdp_keys.items() if v is not None},
     )

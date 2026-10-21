@@ -24,7 +24,7 @@ from x402.mechanisms.svm.exact.server import ExactSvmScheme as ExactSvmServerSch
 from x402.server import x402ResourceServer
 
 from .config import load_settings
-from .discovery import llms_txt, skill_md, x402_manifest
+from .discovery import bazaar_extension, llms_txt, skill_md, x402_manifest
 from .solana_rail import SvmReplayGuard, make_after_settle_hook, make_before_verify_hook
 from .verdict import TokenNotFound, analyze
 
@@ -34,9 +34,29 @@ logging.basicConfig(level=logging.INFO)
 settings = load_settings()  # raises if payout wallet is a placeholder
 
 # --- x402 wiring -------------------------------------------------------------
-# Keyless public facilitator (ultravioletadao) — verified to settle Base.
-facilitator = HTTPFacilitatorClient(FacilitatorConfig(url=settings.facilitator_url))
-log.info("facilitator: %s (%s)", settings.facilitator_url, settings.network)
+# The facilitator is chosen by X402_FACILITATOR_URL alone (plus CDP keys for
+# the CDP branch). Cataloging is settlement-driven per facilitator — each
+# index lists only settlements through its OWN facilitator — so the env
+# choice decides which catalog a settled payment feeds:
+#   * CDP (api.cdp.coinbase.com, needs CDP_API_KEY_ID/SECRET): CDP Bazaar.
+#   * PayAI (facilitator.payai.network, no key for exact): PayAI index.
+#   * default keyless ultravioletadao: settles Base, feeds no major index.
+# One deployment settles through one facilitator at a time; to appear in
+# both indexes, settle at least one call under each configuration.
+if settings.use_cdp:
+    from .cdp_auth import cdp_facilitator_config
+
+    assert settings.cdp_api_key_id and settings.cdp_api_key_secret
+    facilitator = HTTPFacilitatorClient(
+        cdp_facilitator_config(settings.cdp_api_key_id, settings.cdp_api_key_secret)
+    )
+    log.info("facilitator: CDP (Bazaar cataloging path)")
+elif settings.use_payai:
+    facilitator = HTTPFacilitatorClient(FacilitatorConfig(url=settings.facilitator_url))
+    log.info("facilitator: PayAI (PayAI index cataloging path)")
+else:
+    facilitator = HTTPFacilitatorClient(FacilitatorConfig(url=settings.facilitator_url))
+    log.info("facilitator: %s (%s)", settings.facilitator_url, settings.network)
 
 resource_server = x402ResourceServer(facilitator)
 resource_server.register(settings.network, ExactEvmScheme())
@@ -89,7 +109,9 @@ VERDICT_DESCRIPTION = (
     "CAUTION / DANGER with a 0-100 score, six weighted market-structure "
     "signals (liquidity depth, volume churn, sell pressure, price action, "
     "trader breadth, pair age) and a written analyst take. Built for AI "
-    "agents screening tokens before touching them."
+    "agents screening tokens before touching them. Use this when an agent "
+    "is about to buy, swap, or route funds into a token and needs a fast "
+    "risk screen first."
 )
 
 routes = {
@@ -99,37 +121,7 @@ routes = {
         mime_type="application/json",
         service_name=settings.service_name,  # ≤32 chars, forwarded to Bazaar
         tags=["tokens", "defi", "risk", "research", "agents"],
-        extensions={
-            "bazaar": {
-                "info": {
-                    "input": {
-                        "type": "http",
-                        "method": "POST",
-                        "bodyType": "json",
-                        "body": {
-                            "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
-                            "chain": "base",
-                        },
-                    },
-                    "output": {
-                        "type": "application/json",
-                        "example": {
-                            "verdict": "CAUTION",
-                            "score": 35.0,
-                            "take": "BASE (Base King) trades at $0.0003238 on uniswap with $259.1k in liquidity. Trading has effectively stopped — $0 of volume across 3 transactions in 24h — so this is a dormant book, not a live market, whatever the liquidity figure says. Verdict: CAUTION ...",
-                        },
-                    },
-                },
-                "schema": {
-                    "type": "object",
-                    "required": ["address"],
-                    "properties": {
-                        "address": {"type": "string"},
-                        "chain": {"type": "string"},
-                    },
-                },
-            }
-        },
+        extensions={"bazaar": bazaar_extension()},
     ),
 }
 
@@ -289,6 +281,17 @@ def _load_example_verdict() -> dict | None:
 _EXAMPLE_VERDICT = _load_example_verdict()
 
 
+def _example_bazaar_extension() -> dict:
+    """The live bazaar extension with ONLY the sample output elided —
+    the schemas stay complete; the page's rule is about not publishing
+    an example verdict as if it were a capture (see step 4)."""
+    ext = bazaar_extension()
+    ext["info"]["output"]["example"] = (
+        "… (elided — see step 4: this page publishes only real captured verdicts)"
+    )
+    return ext
+
+
 def _example_challenge() -> dict:
     return {
         "x402Version": 2,
@@ -311,30 +314,7 @@ def _example_challenge() -> dict:
                 "extra": {"name": "USD Coin", "version": "2"},
             }
         ],
-        "extensions": {
-            "bazaar": {
-                "info": {
-                    "input": {
-                        "type": "http",
-                        "method": "POST",
-                        "bodyType": "json",
-                        "body": {"address": _EXAMPLE_TOKEN, "chain": "base"},
-                    },
-                    "output": {
-                        "type": "application/json",
-                        "example": "… (elided — see step 4: this page publishes only real captured verdicts)",
-                    },
-                },
-                "schema": {
-                    "type": "object",
-                    "required": ["address"],
-                    "properties": {
-                        "address": {"type": "string"},
-                        "chain": {"type": "string"},
-                    },
-                },
-            }
-        },
+        "extensions": {"bazaar": _example_bazaar_extension()},
     }
 
 
