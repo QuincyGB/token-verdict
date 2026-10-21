@@ -8,6 +8,7 @@ Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
 
 from __future__ import annotations
 
+import hmac
 import html
 import json
 import logging
@@ -548,9 +549,9 @@ async def llms(request: Request):
     return llms_txt(settings, _public_base(request))
 
 
-@app.post("/v1/verdict")
-async def verdict(req: VerdictRequest):
-    """Paid endpoint — unreachable until the x402 middleware verifies payment."""
+async def _run_verdict(req: VerdictRequest):
+    """The verdict pipeline — shared by the x402 route and the
+    RapidAPI route so both return identical bytes."""
     address = req.address.strip()
     if not address.startswith("0x") or len(address) != 42:
         return JSONResponse({"error": "address must be a 0x contract address"}, status_code=422)
@@ -558,10 +559,32 @@ async def verdict(req: VerdictRequest):
         result = await analyze(address, req.chain)
     except TokenNotFound as e:
         return JSONResponse({"error": str(e)}, status_code=404)
-    except Exception as e:  # noqa: BLE001 — never leak tracebacks to payers
+    except Exception as e:  # noqa: BLE001 — never leak tracebacks to callers
         log.exception("verdict failed for %s", address)
         return JSONResponse({"error": f"analysis failed: {e}"}, status_code=502)
     return result
+
+
+@app.post("/v1/verdict")
+async def verdict(req: VerdictRequest):
+    """Paid endpoint — unreachable until the x402 middleware verifies payment."""
+    return await _run_verdict(req)
+
+
+@app.post("/v1/verdict/rapidapi")
+async def verdict_rapidapi(req: VerdictRequest, request: Request):
+    """RapidAPI gateway route — RapidAPI has already authenticated and
+    billed the consumer; the gateway proves itself with the per-API
+    proxy secret (Studio → Definition → Security). NOT x402-gated:
+    deliberately absent from the `routes` dict above."""
+    secret = settings.rapidapi_proxy_secret
+    if not secret:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    presented = request.headers.get("x-rapidapi-proxy-secret", "")
+    if not hmac.compare_digest(presented, secret):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    log.info("rapidapi verdict call")
+    return await _run_verdict(req)
 
 
 def main() -> None:

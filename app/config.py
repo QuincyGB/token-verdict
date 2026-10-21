@@ -44,6 +44,10 @@ class Settings:
     solana_network: str = SOLANA_MAINNET
     solana_usdc_mint: str = SOLANA_USDC_MINT
     solana_rpc_url: str | None = None  # optional: adds blockhash hints to 402s
+    # RapidAPI gateway shared secret (optional). Only used to gate the
+    # /v1/verdict/rapidapi route; unset = route disabled. See
+    # rapidapi-bypass-spec (platform-signups pack).
+    rapidapi_proxy_secret: str | None = None
 
 
 def _truthy(value: str | None) -> bool:
@@ -68,6 +72,8 @@ def load_settings() -> Settings:
         if not validate_svm_address(solana_pay_to):
             raise RuntimeError(f"X402_SOLANA_PAY_TO is not a valid Solana address: {solana_pay_to!r}")
 
+    rapidapi_proxy_secret = os.environ.get("RAPIDAPI_PROXY_SECRET", "").strip() or None
+
     return Settings(
         pay_to=pay_to,
         price_usdc=os.environ.get("X402_PRICE_USDC", "$0.02").strip(),
@@ -81,4 +87,5 @@ def load_settings() -> Settings:
         solana_network=os.environ.get("X402_SOLANA_NETWORK", SOLANA_MAINNET).strip(),
         solana_usdc_mint=os.environ.get("X402_SOLANA_USDC_MINT", SOLANA_USDC_MINT).strip(),
         solana_rpc_url=os.environ.get("SOLANA_RPC_URL", "").strip() or None,
+        rapidapi_proxy_secret=rapidapi_proxy_secret,
     )
