@@ -33,24 +33,47 @@ def _num(v, default=0.0) -> float:
         return default
 
 
+_client: httpx.AsyncClient | None = None
+
+
+def _shared_client() -> httpx.AsyncClient:
+    """One process-wide DEXScreener client. Building a fresh AsyncClient
+    per request (the original shape) threw away the connection pool every
+    call, so each verdict paid a new DNS + TCP + TLS handshake to
+    api.dexscreener.com on top of the API time. The shared client keeps
+    connections alive between calls. Per-phase timeouts keep the old
+    15 s overall budget while failing a dead connect in 5 s."""
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=10,
+                keepalive_expiry=90.0,
+            ),
+        )
+    return _client
+
+
 async def fetch_token_data(address: str, chain: str = "base") -> dict:
     """Return the highest-liquidity DEXScreener pair for a token address."""
     chain_id = CHAIN_IDS.get(chain.lower(), chain.lower())
-    async with httpx.AsyncClient(timeout=15) as client:
-        # Primary: token profiles endpoint.
-        r = await client.get(f"{DEXSCREENER_API}/tokens/v1/{chain_id}/{address}")
-        pairs = r.json() if r.status_code == 200 else []
-        # Fallback: search by address.
-        if not pairs:
-            r = await client.get(
-                f"{DEXSCREENER_API}/latest/dex/search", params={"q": address}
-            )
-            data = r.json() if r.status_code == 200 else {}
-            pairs = [
-                p for p in (data.get("pairs") or [])
-                if p.get("chainId") == chain_id
-                and (p.get("baseToken") or {}).get("address", "").lower() == address.lower()
-            ]
+    client = _shared_client()
+    # Primary: token profiles endpoint.
+    r = await client.get(f"{DEXSCREENER_API}/tokens/v1/{chain_id}/{address}")
+    pairs = r.json() if r.status_code == 200 else []
+    # Fallback: search by address.
+    if not pairs:
+        r = await client.get(
+            f"{DEXSCREENER_API}/latest/dex/search", params={"q": address}
+        )
+        data = r.json() if r.status_code == 200 else {}
+        pairs = [
+            p for p in (data.get("pairs") or [])
+            if p.get("chainId") == chain_id
+            and (p.get("baseToken") or {}).get("address", "").lower() == address.lower()
+        ]
     if not pairs:
         raise TokenNotFound(f"No DEXScreener pair found for {address} on {chain_id}")
     pairs.sort(key=lambda p: _num((p.get("liquidity") or {}).get("usd")), reverse=True)
