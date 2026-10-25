@@ -2,6 +2,9 @@
 
 Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base;
         Solana mainnet rail too when SOLANA_RAIL_ENABLED is set)
+        POST /v1/pre-trade ($0.05, Base) — combined PROCEED / CAUTION /
+        ABORT from token + wallet + allowance legs
+        POST /v1/batch-verdict ($0.20 flat, Base) — 1-25 token screen
 Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
         /example (one verdict end to end, for humans)
 """
@@ -24,8 +27,19 @@ from x402.mechanisms.evm.exact.server import ExactEvmScheme
 from x402.mechanisms.svm.exact.server import ExactSvmScheme as ExactSvmServerScheme
 from x402.server import x402ResourceServer
 
+from .batch import BatchUnavailable, run_batch
+from .chain import is_address
 from .config import load_settings
-from .discovery import OWNERSHIP_PROOFS, bazaar_extension, llms_txt, skill_md, x402_manifest
+from .discovery import (
+    OWNERSHIP_PROOFS,
+    bazaar_batch_extension,
+    bazaar_extension,
+    bazaar_pre_trade_extension,
+    llms_txt,
+    skill_md,
+    x402_manifest,
+)
+from .pretrade import PreTradeUnavailable, run_pre_trade
 from .solana_rail import SvmReplayGuard, make_after_settle_hook, make_before_verify_hook
 from .verdict import TokenNotFound, analyze
 
@@ -115,6 +129,38 @@ VERDICT_DESCRIPTION = (
     "risk screen first."
 )
 
+PRE_TRADE_DESCRIPTION = (
+    "One combined go/no-go before an agent spends: PROCEED / CAUTION / "
+    "ABORT from the token's market verdict, the counterparty wallet's "
+    "sanctions, age and poisoning check, and — with a spender — its ERC-20 "
+    "approvals. A leg that cannot be evaluated returns unknown and caps "
+    "the verdict at CAUTION. Use this when an agent is about to swap, pay, "
+    "or route funds and needs token + wallet risk in a single call."
+)
+
+BATCH_DESCRIPTION = (
+    "Screen up to 25 Base tokens in one flat-fee call: per-token SOLID / "
+    "CAUTION / DANGER verdicts with scores and signals, sorted riskiest "
+    "first, plus summary counts; tokens that cannot be fetched return "
+    "UNKNOWN with a reason, and if most of the batch fails the call fails "
+    "unsettled. Use this when an agent holds a list of candidate tokens "
+    "and needs the risky ones flagged before trading any of them."
+)
+
+
+def _base_only(price: str) -> list[PaymentOption]:
+    """The two new routes are Base-only (their wallet/allowance legs read
+    Base state); the Solana rail stays exclusive to /v1/verdict."""
+    return [
+        PaymentOption(
+            scheme="exact",
+            pay_to=settings.pay_to,
+            price=price,
+            network=settings.network,
+        )
+    ]
+
+
 routes = {
     "POST /v1/verdict": RouteConfig(
         accepts=_accepts,
@@ -123,6 +169,22 @@ routes = {
         service_name=settings.service_name,  # ≤32 chars, forwarded to Bazaar
         tags=["tokens", "defi", "risk", "research", "agents"],
         extensions={"bazaar": bazaar_extension()},
+    ),
+    "POST /v1/pre-trade": RouteConfig(
+        accepts=_base_only(settings.pre_trade_price_usdc),
+        description=PRE_TRADE_DESCRIPTION,
+        mime_type="application/json",
+        service_name=settings.service_name,
+        tags=["tokens", "wallets", "defi", "risk", "pre-trade", "agents"],
+        extensions={"bazaar": bazaar_pre_trade_extension()},
+    ),
+    "POST /v1/batch-verdict": RouteConfig(
+        accepts=_base_only(settings.batch_verdict_price_usdc),
+        description=BATCH_DESCRIPTION,
+        mime_type="application/json",
+        service_name=settings.service_name,
+        tags=["tokens", "batch", "defi", "risk", "screening", "agents"],
+        extensions={"bazaar": bazaar_batch_extension()},
     ),
 }
 
@@ -164,6 +226,21 @@ async def x402_middleware(request: Request, call_next):
 class VerdictRequest(BaseModel):
     address: str = Field(description="Token contract address (0x...)")
     chain: str = Field(default="base", description="Chain id label: base | ethereum | solana")
+
+
+class PreTradeRequest(BaseModel):
+    token_address: str = Field(description="Token contract address (0x...) the trade would buy or receive")
+    chain: str = Field(default="base", description="Chain of the token leg: base | ethereum | solana (wallet legs are Base-only)")
+    wallet_address: str | None = Field(default=None, description="Optional Base wallet to check (sanctions, age, poisoning)")
+    spender: str | None = Field(default=None, description="Optional spender contract; with wallet_address adds the allowance leg")
+
+
+class BatchVerdictRequest(BaseModel):
+    token_addresses: list[str] = Field(
+        min_length=1,
+        max_length=25,
+        description="1-25 Base token contract addresses (0x...); duplicates are screened once",
+    )
 
 
 def _public_base(request: Request) -> str:
@@ -243,6 +320,11 @@ payment, and the response.</p>
   <tr><th>Route</th><th>Price</th><th>Purpose</th></tr>
   <tr><td><code>POST /v1/verdict</code></td><td>$0.02</td>
       <td>Token risk verdict (paid, x402)</td></tr>
+  <tr><td><code>POST /v1/pre-trade</code></td><td>$0.05</td>
+      <td>Combined PROCEED / CAUTION / ABORT before a trade — token +
+      wallet + allowance legs (paid, x402, Base)</td></tr>
+  <tr><td><code>POST /v1/batch-verdict</code></td><td>$0.20</td>
+      <td>Screen 1–25 Base tokens in one call, riskiest first (paid, x402)</td></tr>
   <tr><td><code>GET /example</code></td><td>free</td>
       <td>One verdict end to end — worked example for humans</td></tr>
   <tr><td><code>GET /quote</code></td><td>free</td>
@@ -524,6 +606,11 @@ async def quote():
         "network": settings.network,
         "payTo": settings.pay_to,
         "protocol": "x402 v2 (exact scheme)",
+        "endpoints": [
+            {"endpoint": "/v1/verdict", "price": settings.price_usdc},
+            {"endpoint": "/v1/pre-trade", "price": settings.pre_trade_price_usdc},
+            {"endpoint": "/v1/batch-verdict", "price": settings.batch_verdict_price_usdc},
+        ],
     }
     if settings.solana_enabled:
         body["rails"] = [
@@ -576,6 +663,57 @@ async def _run_verdict(req: VerdictRequest):
 async def verdict(req: VerdictRequest):
     """Paid endpoint — unreachable until the x402 middleware verifies payment."""
     return await _run_verdict(req)
+
+
+@app.post("/v1/pre-trade")
+async def pre_trade(req: PreTradeRequest):
+    """Paid endpoint — combined PROCEED / CAUTION / ABORT. Legs degrade
+    to 'unknown' individually; only a total leg failure is a 502 (and
+    the x402 middleware does not settle payment on >= 400)."""
+    token = req.token_address.strip()
+    if not is_address(token):
+        return JSONResponse({"error": "token_address must be a 0x contract address"}, status_code=422)
+    wallet = req.wallet_address.strip() if req.wallet_address else None
+    spender = req.spender.strip() if req.spender else None
+    if wallet is not None and not is_address(wallet):
+        return JSONResponse({"error": "wallet_address must be a 0x address"}, status_code=422)
+    if spender is not None and not is_address(spender):
+        return JSONResponse({"error": "spender must be a 0x contract address"}, status_code=422)
+    if spender is not None and wallet is None:
+        return JSONResponse(
+            {"error": "spender requires wallet_address — allowances belong to a wallet"},
+            status_code=422,
+        )
+    if wallet is not None and req.chain != "base":
+        return JSONResponse(
+            {"error": "wallet and allowance legs are Base-only; use chain 'base' when supplying wallet_address"},
+            status_code=422,
+        )
+    try:
+        return await run_pre_trade(token, req.chain, wallet, spender)
+    except TokenNotFound as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    except PreTradeUnavailable as e:
+        log.warning("pre-trade unavailable for %s: %s", token, e)
+        return JSONResponse({"error": f"pre-trade unavailable: {e}"}, status_code=502)
+    except Exception as e:  # noqa: BLE001 — never leak tracebacks to callers
+        log.exception("pre-trade failed for %s", token)
+        return JSONResponse({"error": f"pre-trade failed: {e}"}, status_code=502)
+
+
+@app.post("/v1/batch-verdict")
+async def batch_verdict(req: BatchVerdictRequest):
+    """Paid endpoint — flat-fee screen of 1-25 Base tokens. Per-token
+    failures come back UNKNOWN with a reason; if more than half the
+    batch cannot be fetched the call is a 502 and does not settle."""
+    try:
+        return await run_batch([a.strip() for a in req.token_addresses])
+    except BatchUnavailable as e:
+        log.warning("batch unavailable: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=502)
+    except Exception as e:  # noqa: BLE001 — never leak tracebacks to callers
+        log.exception("batch verdict failed")
+        return JSONResponse({"error": f"batch failed: {e}"}, status_code=502)
 
 
 @app.post("/v1/verdict/rapidapi")

@@ -258,6 +258,392 @@ def bazaar_extension() -> dict:
     }
 
 
+def _extension(input_example: dict, input_schema: dict,
+               output_example: dict, output_schema: dict) -> dict:
+    """The canonical v2 Bazaar extension shape (see bazaar_extension)."""
+    return {
+        "info": {
+            "input": {
+                "type": "http",
+                "method": "POST",
+                "bodyType": "json",
+                "body": input_example,
+            },
+            "output": {
+                "type": "json",
+                "example": output_example,
+                "schema": output_schema,
+            },
+        },
+        "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "input": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "const": "http"},
+                        "method": {"type": "string", "enum": ["POST", "PUT", "PATCH"]},
+                        "bodyType": {"type": "string", "enum": ["json", "form-data", "text"]},
+                        "body": input_schema,
+                    },
+                    "required": ["type", "method", "bodyType", "body"],
+                    "additionalProperties": False,
+                },
+                "output": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string"},
+                        "example": output_schema,
+                        "schema": {"type": "object"},
+                    },
+                    "required": ["type"],
+                },
+            },
+            "required": ["input"],
+        },
+    }
+
+
+# --- /v1/pre-trade schemas ------------------------------------------------------
+
+_SIGNAL_SCHEMA = {
+    "type": "object",
+    "required": ["name", "score", "weight", "detail"],
+    "properties": {
+        "name": {"type": "string"},
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "weight": {"type": "number"},
+        "detail": {"type": "string"},
+    },
+}
+
+PRE_TRADE_INPUT_SCHEMA = {
+    "type": "object",
+    "required": ["token_address"],
+    "properties": {
+        "token_address": {
+            "type": "string",
+            "description": "Token contract address (0x...) the trade would buy or receive",
+        },
+        "chain": {
+            "type": "string",
+            "enum": ["base", "ethereum", "solana"],
+            "default": "base",
+            "description": "Chain of the token leg. Wallet/allowance legs are Base-only: supplying wallet_address requires chain base.",
+        },
+        "wallet_address": {
+            "type": ["string", "null"],
+            "description": "Optional counterparty / own wallet (Base 0x...) to check for sanctions, age, activity and poisoning signals",
+        },
+        "spender": {
+            "type": ["string", "null"],
+            "description": "Optional spender contract (Base 0x...); with wallet_address, adds the allowance leg for that spender",
+        },
+    },
+}
+
+_TOKEN_LEG_SCHEMA = {
+    "type": "object",
+    "required": ["status"],
+    "properties": {
+        "status": {"type": "string", "enum": ["ok", "unknown"]},
+        "token": {
+            "type": ["object", "null"],
+            "properties": {
+                "address": {"type": "string"},
+                "symbol": {"type": "string"},
+                "name": {"type": "string"},
+                "chain": {"type": "string"},
+            },
+        },
+        "verdict": {"type": ["string", "null"], "enum": ["SOLID", "CAUTION", "DANGER", None]},
+        "risk_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "signals": {"type": "array", "items": _SIGNAL_SCHEMA},
+        "take": {"type": ["string", "null"]},
+        "detail": {"type": "string"},
+    },
+}
+
+_WALLET_LEG_SCHEMA = {
+    "type": "object",
+    "required": ["status"],
+    "properties": {
+        "status": {"type": "string", "enum": ["ok", "unknown"]},
+        "address": {"type": "string"},
+        "verdict": {"type": ["string", "null"], "enum": ["SAFE", "CAUTION", "AVOID", None]},
+        "risk_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "sanctions": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["matched", "no_match", "unknown"]},
+                "matched": {"type": ["boolean", "null"]},
+                "snapshot_date": {"type": ["string", "null"]},
+            },
+        },
+        "wallet_age_days": {"type": ["integer", "null"]},
+        "first_activity": {"type": "string"},
+        "outgoing_tx_count_nonce": {"type": ["integer", "null"]},
+        "poisoning": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["signals_found", "none_found", "unknown"]},
+                "signals": {"type": "array"},
+            },
+        },
+        "reasons": {"type": "array"},
+        "not_checked": {"type": "string"},
+    },
+}
+
+_ALLOWANCE_LEG_SCHEMA = {
+    "type": "object",
+    "required": ["status"],
+    "properties": {
+        "status": {"type": "string", "enum": ["ok", "unknown"]},
+        "owner": {"type": "string"},
+        "spender": {"type": ["string", "null"]},
+        "tokens_held_checked": {"type": ["integer", "string"]},
+        "spenders_checked": {"type": "integer"},
+        "allowance_checks_performed": {"type": "integer"},
+        "active_approvals": {"type": ["array", "string"]},
+        "unlimited_approvals": {"type": ["integer", "string"]},
+        "max_risk": {"type": "string", "enum": ["high", "medium", "none", "unknown"]},
+        "summary": {"type": "string"},
+        "not_checked": {"type": "string"},
+    },
+}
+
+PRE_TRADE_OUTPUT_SCHEMA = {
+    "type": "object",
+    "required": ["verdict", "score", "legs", "degraded", "not_checked"],
+    "properties": {
+        "verdict": {"type": "string", "enum": ["PROCEED", "CAUTION", "ABORT"]},
+        "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Combined risk = the worst delivered leg's risk score",
+        },
+        "token": {"type": "object"},
+        "wallet": {"type": ["string", "null"]},
+        "spender": {"type": ["string", "null"]},
+        "legs": {
+            "type": "object",
+            "required": ["token"],
+            "properties": {
+                "token": _TOKEN_LEG_SCHEMA,
+                "wallet": _WALLET_LEG_SCHEMA,
+                "allowance": _ALLOWANCE_LEG_SCHEMA,
+            },
+        },
+        "abort_reasons": {"type": "array", "items": {"type": "string"}},
+        "degraded": {
+            "type": "boolean",
+            "description": "True when at least one leg could not be evaluated (verdict then caps at CAUTION)",
+        },
+        "not_checked": {"type": "string"},
+    },
+}
+
+PRE_TRADE_INPUT_EXAMPLE = {
+    "token_address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+    "chain": "base",
+    "wallet_address": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+    "spender": None,
+}
+
+# Representative example in the exact response shape (token leg values
+# mirror the /v1/verdict example fixture; wallet leg mirrors the shape
+# pinned by tests/test_wallet_legs.py). Tests validate it against
+# PRE_TRADE_OUTPUT_SCHEMA.
+PRE_TRADE_OUTPUT_EXAMPLE = {
+    "verdict": "CAUTION",
+    "score": 35.0,
+    "token": VERDICT_OUTPUT_EXAMPLE["token"],
+    "wallet": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+    "spender": None,
+    "legs": {
+        "token": {
+            "status": "ok",
+            "token": VERDICT_OUTPUT_EXAMPLE["token"],
+            "verdict": "CAUTION",
+            "risk_score": 35.0,
+            "signals": VERDICT_OUTPUT_EXAMPLE["signals"],
+            "take": VERDICT_OUTPUT_EXAMPLE["take"],
+            "market": VERDICT_OUTPUT_EXAMPLE["market"],
+        },
+        "wallet": {
+            "status": "ok",
+            "address": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+            "verdict": "SAFE",
+            "risk_score": 0,
+            "sanctions": {
+                "status": "no_match",
+                "matched": False,
+                "detail": "Address does not appear in the bundled OFAC SDN digital-currency snapshot.",
+                "snapshot_date": "2026-10-21",
+                "snapshot_source": "https://www.treasury.gov/ofac/downloads/sdn.csv",
+                "snapshot_entries": 91,
+            },
+            "wallet_age_days": 357,
+            "first_activity": "2025-11-02T14:03:11+00:00",
+            "outgoing_tx_count_nonce": 137,
+            "poisoning": {
+                "status": "none_found",
+                "signals": [],
+                "detail": "No zero-value lookalike transfers in the recent history sampled.",
+            },
+            "reasons": [],
+            "not_checked": "Not checked: the person or entity behind the address.",
+        },
+    },
+    "abort_reasons": [],
+    "degraded": False,
+    "not_checked": "Not checked: contract honeypot simulation and holder concentration.",
+}
+
+
+def bazaar_pre_trade_extension() -> dict:
+    return _extension(
+        PRE_TRADE_INPUT_EXAMPLE,
+        PRE_TRADE_INPUT_SCHEMA,
+        PRE_TRADE_OUTPUT_EXAMPLE,
+        PRE_TRADE_OUTPUT_SCHEMA,
+    )
+
+
+# --- /v1/batch-verdict schemas ----------------------------------------------------
+
+_BATCH_ENTRY_SCHEMA = {
+    "type": "object",
+    "required": ["address", "status", "verdict"],
+    "properties": {
+        "address": {"type": "string"},
+        "status": {"type": "string", "enum": ["ok", "unknown"]},
+        "verdict": {"type": "string", "enum": ["SOLID", "CAUTION", "DANGER", "UNKNOWN"]},
+        "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "token": {"type": ["object", "null"]},
+        "signals": {"type": "array", "items": _SIGNAL_SCHEMA},
+        "take": {"type": ["string", "null"]},
+        "reason": {
+            "type": ["string", "null"],
+            "description": "Why the token is UNKNOWN (set only when status is unknown)",
+        },
+    },
+}
+
+BATCH_INPUT_SCHEMA = {
+    "type": "object",
+    "required": ["token_addresses"],
+    "properties": {
+        "token_addresses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 25,
+            "items": {"type": "string"},
+            "description": "1-25 Base token contract addresses (0x...). Duplicates are screened once.",
+        },
+    },
+}
+
+BATCH_OUTPUT_SCHEMA = {
+    "type": "object",
+    "required": ["chain", "requested_count", "unique_count", "evaluated_count",
+                 "unknown_count", "summary", "results"],
+    "properties": {
+        "chain": {"type": "string", "const": "base"},
+        "requested_count": {"type": "integer", "minimum": 1, "maximum": 25},
+        "unique_count": {"type": "integer"},
+        "evaluated_count": {"type": "integer"},
+        "unknown_count": {"type": "integer"},
+        "summary": {
+            "type": "object",
+            "required": ["SOLID", "CAUTION", "DANGER", "UNKNOWN"],
+            "properties": {
+                "SOLID": {"type": "integer"},
+                "CAUTION": {"type": "integer"},
+                "DANGER": {"type": "integer"},
+                "UNKNOWN": {"type": "integer"},
+            },
+        },
+        "results": {
+            "type": "array",
+            "items": _BATCH_ENTRY_SCHEMA,
+            "description": "Evaluated tokens riskiest first; UNKNOWN entries last",
+        },
+        "not_checked": {"type": "string"},
+    },
+}
+
+BATCH_INPUT_EXAMPLE = {
+    "token_addresses": [
+        "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+        "0x000000000000000000000000000000000000dEaD",
+    ]
+}
+
+# Representative example in the exact response shape: the first entry is
+# the /v1/verdict example fixture verbatim; the second shows the honest
+# UNKNOWN shape for a token with no fetchable market. Tests validate it
+# against BATCH_OUTPUT_SCHEMA.
+BATCH_OUTPUT_EXAMPLE = {
+    "chain": "base",
+    "requested_count": 2,
+    "unique_count": 2,
+    "evaluated_count": 1,
+    "unknown_count": 1,
+    "summary": {"SOLID": 0, "CAUTION": 1, "DANGER": 0, "UNKNOWN": 1},
+    "results": [
+        {
+            "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+            "status": "ok",
+            "verdict": "CAUTION",
+            "score": 35.0,
+            "token": VERDICT_OUTPUT_EXAMPLE["token"],
+            "signals": VERDICT_OUTPUT_EXAMPLE["signals"],
+            "take": VERDICT_OUTPUT_EXAMPLE["take"],
+            "market": VERDICT_OUTPUT_EXAMPLE["market"],
+            "reason": None,
+        },
+        {
+            "address": "0x000000000000000000000000000000000000dEaD",
+            "status": "unknown",
+            "verdict": "UNKNOWN",
+            "score": None,
+            "token": None,
+            "signals": [],
+            "take": None,
+            "market": None,
+            "reason": "No DEXScreener pair found for this token on base.",
+        },
+    ],
+    "not_checked": "Per-token limits apply: market structure only.",
+}
+
+
+def bazaar_batch_extension() -> dict:
+    return _extension(
+        BATCH_INPUT_EXAMPLE,
+        BATCH_INPUT_SCHEMA,
+        BATCH_OUTPUT_EXAMPLE,
+        BATCH_OUTPUT_SCHEMA,
+    )
+
+
+def _base_accepts(settings: Settings, price_usdc: str) -> list[dict]:
+    return [
+        {
+            "scheme": "exact",
+            "network": settings.network,
+            "amount": _price_to_units(price_usdc),
+            "asset": USDC_ASSET,
+            "payTo": settings.pay_to,
+            "maxTimeoutSeconds": 300,
+        }
+    ]
+
+
 def x402_manifest(settings: Settings, base_url: str) -> dict:
     # accepts[] mirrors the live 402 challenge so directory validators
     # (Agent Bazaar, x402scan) accept the manifest.
@@ -316,6 +702,43 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                 "outputSchema": VERDICT_OUTPUT_SCHEMA,
             },
             {
+                "resource": f"{base_url}/v1/pre-trade",
+                "method": "POST",
+                "price": settings.pre_trade_price_usdc,
+                "scheme": "exact",
+                "mimeType": "application/json",
+                "description": (
+                    "Combined go/no-go before a trade: PROCEED / CAUTION / "
+                    "ABORT from the token's market verdict, the wallet's "
+                    "sanctions/age/poisoning check, and (with a spender) its "
+                    "ERC-20 approvals. Use this when an agent is about to "
+                    "swap or pay and needs token + wallet + allowance risk "
+                    "in one call."
+                ),
+                "tags": ["tokens", "wallets", "defi", "risk", "pre-trade", "agents"],
+                "accepts": _base_accepts(settings, settings.pre_trade_price_usdc),
+                "inputSchema": PRE_TRADE_INPUT_SCHEMA,
+                "outputSchema": PRE_TRADE_OUTPUT_SCHEMA,
+            },
+            {
+                "resource": f"{base_url}/v1/batch-verdict",
+                "method": "POST",
+                "price": settings.batch_verdict_price_usdc,
+                "scheme": "exact",
+                "mimeType": "application/json",
+                "description": (
+                    "Screen 1-25 Base tokens in one flat-fee call: per-token "
+                    "SOLID / CAUTION / DANGER verdicts with scores, sorted "
+                    "riskiest first, plus summary counts; unfetchable tokens "
+                    "return UNKNOWN with a reason. Use this when an agent is "
+                    "screening a list of tokens before trading any of them."
+                ),
+                "tags": ["tokens", "batch", "defi", "risk", "screening", "agents"],
+                "accepts": _base_accepts(settings, settings.batch_verdict_price_usdc),
+                "inputSchema": BATCH_INPUT_SCHEMA,
+                "outputSchema": BATCH_OUTPUT_SCHEMA,
+            },
+            {
                 "resource": f"{base_url}/quote",
                 "method": "GET",
                 "price": "$0.00",
@@ -359,6 +782,24 @@ Pay with any x402 v2 client (e.g. `x402-fetch`): call the endpoint, get a 402
 challenge, sign, retry with the payment header. Settlement is USDC on the
 network you paid on (Base, or Solana when the Solana rail is enabled).
 
+## More paid endpoints
+
+`POST {base_url}/v1/pre-trade` — {settings.pre_trade_price_usdc} USDC, Base only.
+One combined go/no-go before a trade: `verdict` PROCEED / CAUTION / ABORT with
+a combined risk `score`. Body: `token_address` (required), `chain` (optional,
+default `base`), `wallet_address` (optional — adds the wallet leg: OFAC
+sanctions snapshot, age/activity, address-poisoning signals), `spender`
+(optional — with a wallet, adds the allowance leg for that spender). A leg
+that cannot be evaluated returns status `unknown` and caps the verdict at
+CAUTION; if no leg can be evaluated the call fails with 502 and no payment
+settles.
+
+`POST {base_url}/v1/batch-verdict` — {settings.batch_verdict_price_usdc} USDC flat, Base only.
+Body: `token_addresses` — 1 to 25 Base token addresses. Returns per-token
+verdicts sorted riskiest first plus summary counts. A token that cannot be
+fetched returns verdict UNKNOWN with a reason; if more than half the batch
+cannot be fetched the call fails with 502 and no payment settles.
+
 ## Free endpoints
 
 - `GET {base_url}/quote` — current price, network, payTo
@@ -383,7 +824,9 @@ Paid API: token risk verdicts. Price: {settings.price_usdc} USDC per call, x402 
 
 ## Endpoints
 
-- POST {base_url}/v1/verdict — paid. Body: {{"address": str, "chain"?: str}}
+- POST {base_url}/v1/verdict — paid {settings.price_usdc}. Body: {{"address": str, "chain"?: str}}
+- POST {base_url}/v1/pre-trade — paid {settings.pre_trade_price_usdc}, Base. Body: {{"token_address": str, "chain"?: str, "wallet_address"?: str, "spender"?: str}} — combined PROCEED / CAUTION / ABORT from token + wallet + allowance legs
+- POST {base_url}/v1/batch-verdict — paid {settings.batch_verdict_price_usdc} flat, Base. Body: {{"token_addresses": [str, ...]}} — 1-25 tokens, per-token verdicts riskiest first + summary counts
 - GET {base_url}/quote — free price quote
 - GET {base_url}/health — free liveness check
 - GET {base_url}/.well-known/x402 — manifest

@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import time
 
+from .chain import is_address
 from .verdict import TokenNotFound, analyze
 
 BATCH_MAX_TOKENS = 25
@@ -38,6 +39,18 @@ def clear_batch_cache() -> None:
 
 async def _analyze_one(address: str) -> dict:
     """One token -> a batch entry. Never raises for upstream trouble."""
+    if not is_address(address):
+        return {
+            "address": address,
+            "status": "unknown",
+            "verdict": "UNKNOWN",
+            "score": None,
+            "token": None,
+            "signals": [],
+            "take": None,
+            "market": None,
+            "reason": "not a valid 0x contract address",
+        }
     key = address.lower()
     cached = _cache.get(key)
     if cached is not None and (time.monotonic() - cached[0]) < BATCH_CACHE_TTL_S:

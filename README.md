@@ -80,6 +80,25 @@ guard** in the engine floors any token with < $1,000 of 24h volume and
 < 20 transactions at CAUTION, and the take says why. A dormant book is not a
 healthy market, and the product refuses to call it one.
 
+## Two more paid endpoints (added 2026-10-24)
+
+**`POST /v1/pre-trade` — $0.05, Base.** One combined go/no-go before a
+trade: **PROCEED / CAUTION / ABORT** from three legs — the token verdict
+above, a wallet leg (OFAC SDN snapshot exact-match, wallet age/activity,
+address-poisoning signals; ported from the sister service stall-row), and
+an allowance leg that runs only when `wallet_address` + `spender` are
+both supplied (the wallet's ERC-20 approvals to that spender; the leg
+engine also supports the stall-row curated-spender audit). Combined risk is the *worst* delivered leg's
+score; token DANGER, wallet AVOID or a sanctions match hard-abort; a leg
+that cannot be evaluated returns `unknown` and caps the verdict at
+CAUTION; if no leg evaluates, the call fails 502 and no payment settles.
+
+**`POST /v1/batch-verdict` — $0.20 flat, Base.** Screen 1–25 token
+addresses in one call: per-token verdicts sorted riskiest first plus
+summary counts. Duplicates are screened once (60s cache); a token that
+cannot be fetched returns `UNKNOWN` with a reason; if more than half
+the batch cannot be fetched, the call fails 502 and does not settle.
+
 ## How it works
 
 ```
