@@ -18,6 +18,15 @@ Combination rules (the spec's contract):
     already fired.
   * if NO leg could be evaluated, raise PreTradeUnavailable: the route
     answers 502 and the payment does not settle.
+
+Modes: "full" (default) returns every leg in full. "compact" returns
+the decision-grade shape — the combined verdict and score, the worst
+leg, and one summary per leg (verdict, score, headline reason) —
+derived from the full result by compact_pre_trade, so the two modes
+run the identical computation and can never disagree. It exists
+because discovery extraction (Settled's, measured 2026-10-25)
+silently drops published output samples over ~1.5 KB, and an honest
+full-mode response cannot fit under that.
 """
 
 from __future__ import annotations
@@ -25,7 +34,7 @@ from __future__ import annotations
 from .verdict import TokenNotFound, analyze
 from .wallet import allowance_leg, wallet_leg
 
-__all__ = ["PreTradeUnavailable", "run_pre_trade", "TokenNotFound"]
+__all__ = ["PreTradeUnavailable", "compact_pre_trade", "run_pre_trade", "TokenNotFound"]
 
 
 class PreTradeUnavailable(Exception):
@@ -56,15 +65,123 @@ def _band(score: float) -> str:
     return "ABORT" if score >= 65 else ("CAUTION" if score >= 35 else "PROCEED")
 
 
+def _leg_headline(name: str, leg: dict) -> str:
+    """The one-line WHY for a leg summary, taken from the leg itself —
+    never invented: the token leg's worst-scoring signal, the wallet
+    leg's sanctions hit or biggest deduction, the allowance leg's own
+    summary, or an unevaluated leg's stated reason."""
+    if leg.get("status") != "ok":
+        if leg.get("detail"):
+            return leg["detail"]
+        reasons = leg.get("reasons") or []
+        if reasons and reasons[0].get("detail"):
+            return reasons[0]["detail"]
+        if leg.get("summary"):
+            return leg["summary"]
+        return f"{name} leg could not be evaluated"
+    if name == "token":
+        signals = leg.get("signals") or []
+        if signals:
+            worst = max(signals, key=lambda s: s.get("score") or 0)
+            if worst.get("detail"):
+                return worst["detail"]
+        return leg.get("take") or ""
+    if name == "wallet":
+        sanctions = leg.get("sanctions") or {}
+        if sanctions.get("status") == "matched":
+            return sanctions.get("detail") or "Wallet appears on the OFAC SDN snapshot."
+        reasons = leg.get("reasons") or []
+        if reasons:
+            worst = max(reasons, key=lambda r: r.get("points") or 0)
+            if worst.get("detail"):
+                return worst["detail"]
+        poisoning = leg.get("poisoning") or {}
+        return (
+            f"No risk deductions — sanctions {sanctions.get('status')}, "
+            f"poisoning {poisoning.get('status')}."
+        )
+    # Allowance leg: its summary already is the headline.
+    return leg.get("summary") or ""
+
+
+def _leg_summary(name: str, leg: dict) -> dict:
+    return {
+        "leg": name,
+        "status": leg.get("status"),
+        "verdict": leg.get("verdict"),
+        "score": leg.get("risk_score"),
+        "headline": _leg_headline(name, leg),
+    }
+
+
+def _worst_leg(legs: dict[str, dict]) -> str | None:
+    """The leg that drove the combined outcome: a hard-abort source
+    first (token DANGER, wallet AVOID / sanctions match), else the
+    scored leg with the highest risk (token wins ties, matching the
+    combination order)."""
+    token = legs.get("token") or {}
+    if token.get("verdict") == "DANGER":
+        return "token"
+    wallet = legs.get("wallet") or {}
+    sanctions = wallet.get("sanctions") or {}
+    if wallet.get("verdict") == "AVOID" or sanctions.get("status") == "matched":
+        return "wallet"
+    worst: tuple[str, float] | None = None
+    for name in ("token", "wallet"):
+        leg = legs.get(name)
+        if leg and leg.get("status") == "ok" and leg.get("risk_score") is not None:
+            if worst is None or leg["risk_score"] > worst[1]:
+                worst = (name, leg["risk_score"])
+    return worst[0] if worst else None
+
+
+def compact_pre_trade(result: dict) -> dict:
+    """The compact shape of a full pre-trade result: the decision, the
+    worst leg, and one summary per leg — enough to act on and to know
+    why, without the nested full leg objects (signal arrays, market
+    blocks, sanctions/poisoning detail). Pure projection of the full
+    result, so compact can never disagree with full."""
+    legs = result["legs"]
+    # Same limits, honest pointer: the full text sends the reader to
+    # per-leg not_checked fields the compact shape does not carry.
+    not_checked = result["not_checked"].replace(
+        "Leg-level limits are itemised in each leg's not_checked field.",
+        "Leg-level limits are itemised in full mode's per-leg not_checked fields.",
+    )
+    return {
+        "mode": "compact",
+        "verdict": result["verdict"],
+        "score": result["score"],
+        "token": result["token"],
+        "wallet": result["wallet"],
+        "spender": result["spender"],
+        "worst_leg": _worst_leg(legs),
+        "legs": [
+            _leg_summary(name, legs[name])
+            for name in ("token", "wallet", "allowance")
+            if name in legs
+        ],
+        "abort_reasons": result["abort_reasons"],
+        "degraded": result["degraded"],
+        "not_checked": not_checked,
+    }
+
+
 async def run_pre_trade(
     token_address: str,
     chain: str = "base",
     wallet_address: str | None = None,
     spender: str | None = None,
+    mode: str = "full",
 ) -> dict:
     """Run the legs and combine them. Raises TokenNotFound when the
     token has no market pair at all (the /v1/verdict 404 contract), and
-    PreTradeUnavailable when no leg delivered anything."""
+    PreTradeUnavailable when no leg delivered anything.
+
+    mode="full" (default) returns every leg in full; mode="compact"
+    returns compact_pre_trade's projection of the same result."""
+    if mode not in ("full", "compact"):
+        raise ValueError(f"mode must be 'full' or 'compact' (got {mode!r})")
     # --- token leg -----------------------------------------------------
     token_not_found: TokenNotFound | None = None
     token_leg: dict
@@ -165,7 +282,7 @@ async def run_pre_trade(
         if allowance_cap and verdict == "PROCEED":
             verdict = "CAUTION"
 
-    return {
+    result = {
         "verdict": verdict,
         "score": round(float(combined_score), 1),
         "token": legs["token"].get("token")
@@ -176,4 +293,8 @@ async def run_pre_trade(
         "abort_reasons": abort_reasons,
         "degraded": degraded,
         "not_checked": PRE_TRADE_NOT_CHECKED,
+        "mode": "full",
     }
+    if mode == "compact":
+        return compact_pre_trade(result)
+    return result

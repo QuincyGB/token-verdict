@@ -99,6 +99,14 @@ summary counts. Duplicates are screened once (60s cache); a token that
 cannot be fetched returns `UNKNOWN` with a reason; if more than half
 the batch cannot be fetched, the call fails 502 and does not settle.
 
+Both routes accept `mode`: `"full"` (default) or `"compact"`. Compact
+runs the identical computation and returns the decision-grade shape —
+pre-trade: the decision, the worst leg, and one summary per leg;
+batch-verdict: per-token address/symbol/verdict/score plus the counts —
+derived from the full result, so the two modes can never disagree.
+Same prices, same failure semantics (unknown legs still cap at
+CAUTION, a mostly-unfetchable batch still fails unsettled).
+
 ## How it works
 
 ```

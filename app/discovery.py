@@ -346,6 +346,11 @@ PRE_TRADE_INPUT_SCHEMA = {
             "type": ["string", "null"],
             "description": "Optional spender contract (Base 0x...); with wallet_address, adds the allowance leg for that spender",
         },
+        "mode": {
+            "type": "string",
+            "enum": ["full", "compact"],
+            "description": "Optional response mode, default 'full'. 'full' returns every leg in full (signals, market data, sanctions and poisoning detail). 'compact' returns the decision, the worst leg, and one summary per leg (verdict, score, headline reason) — the same computation, a smaller response.",
+        },
     },
 }
 
@@ -420,6 +425,24 @@ _ALLOWANCE_LEG_SCHEMA = {
     },
 }
 
+# The compact leg summary (mode="compact"): one entry per leg that ran,
+# in token / wallet / allowance order. `verdict` and `score` are the
+# leg's own (the allowance leg has neither — its headline carries its
+# summary); `headline` is the leg's headline reason, taken from the leg
+# itself (worst signal, sanctions hit / biggest deduction, or the
+# stated reason a leg could not be evaluated).
+_LEG_SUMMARY_SCHEMA = {
+    "type": "object",
+    "required": ["leg", "status", "headline"],
+    "properties": {
+        "leg": {"type": "string", "enum": ["token", "wallet", "allowance"]},
+        "status": {"type": "string", "enum": ["ok", "unknown"]},
+        "verdict": {"type": ["string", "null"]},
+        "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "headline": {"type": "string"},
+    },
+}
+
 PRE_TRADE_OUTPUT_SCHEMA = {
     "type": "object",
     "required": ["verdict", "score", "legs", "degraded", "not_checked"],
@@ -435,13 +458,24 @@ PRE_TRADE_OUTPUT_SCHEMA = {
         "wallet": {"type": ["string", "null"]},
         "spender": {"type": ["string", "null"]},
         "legs": {
-            "type": "object",
-            "required": ["token"],
-            "properties": {
-                "token": _TOKEN_LEG_SCHEMA,
-                "wallet": _WALLET_LEG_SCHEMA,
-                "allowance": _ALLOWANCE_LEG_SCHEMA,
-            },
+            "anyOf": [
+                {
+                    "type": "object",
+                    "required": ["token"],
+                    "properties": {
+                        "token": _TOKEN_LEG_SCHEMA,
+                        "wallet": _WALLET_LEG_SCHEMA,
+                        "allowance": _ALLOWANCE_LEG_SCHEMA,
+                    },
+                },
+                {"type": "array", "items": _LEG_SUMMARY_SCHEMA},
+            ],
+            "description": "Full mode: an object keyed by leg name with each leg in full. Compact mode: an array of per-leg summaries (see worst_leg).",
+        },
+        "worst_leg": {
+            "type": ["string", "null"],
+            "enum": ["token", "wallet", None],
+            "description": "Compact mode only: the leg that drove the combined outcome (a hard-abort source, else the highest-risk scored leg)",
         },
         "abort_reasons": {"type": "array", "items": {"type": "string"}},
         "degraded": {
@@ -449,6 +483,8 @@ PRE_TRADE_OUTPUT_SCHEMA = {
             "description": "True when at least one leg could not be evaluated (verdict then caps at CAUTION)",
         },
         "not_checked": {"type": "string"},
+        "mode": {"type": "string", "enum": ["full", "compact"],
+                 "description": "The response mode that produced this result (echo of the request's mode, 'full' when omitted). The legs shape follows it."},
     },
 }
 
@@ -507,14 +543,60 @@ PRE_TRADE_OUTPUT_EXAMPLE = {
     "abort_reasons": [],
     "degraded": False,
     "not_checked": "Not checked: contract honeypot simulation and holder concentration.",
+    "mode": "full",
+}
+
+# The listing's example pair is a COMPACT request/response: Settled's
+# extractor silently drops published output samples over ~1.5 KB
+# serialized (measured 2026-10-25: 1,453 B kept, 1,721 B dropped), and
+# an honest full-mode sample cannot fit — the token leg alone re-embeds
+# the full verdict fixture. The compact response is a real, complete
+# product (the decision, the worst leg, one summary per leg), so its
+# real output is what the listing publishes; full mode stays the
+# default for direct buyers. Tests pin this example byte-equal to a
+# fresh compact run on the fixture legs, and under the size limit.
+PRE_TRADE_COMPACT_INPUT_EXAMPLE = {**PRE_TRADE_INPUT_EXAMPLE, "mode": "compact"}
+
+PRE_TRADE_COMPACT_OUTPUT_EXAMPLE = {
+    "mode": "compact",
+    "verdict": "CAUTION",
+    "score": 35.0,
+    "token": VERDICT_OUTPUT_EXAMPLE["token"],
+    "wallet": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+    "spender": None,
+    "worst_leg": "token",
+    "legs": [
+        {
+            "leg": "token",
+            "status": "ok",
+            "verdict": "CAUTION",
+            "score": 35.0,
+            "headline": "3 transactions in 24h — a handful of wallets is the market.",
+        },
+        {
+            "leg": "wallet",
+            "status": "ok",
+            "verdict": "SAFE",
+            "score": 0,
+            "headline": "No risk deductions — sanctions no_match, poisoning none_found.",
+        },
+    ],
+    "abort_reasons": [],
+    "degraded": False,
+    "not_checked": (
+        "Not checked: contract honeypot simulation and holder concentration "
+        "(need a paid indexer), the person or entity behind the wallet, and "
+        "approvals beyond the allowance leg. Leg-level limits are itemised "
+        "in full mode's per-leg not_checked fields."
+    ),
 }
 
 
 def bazaar_pre_trade_extension() -> dict:
     return _extension(
-        PRE_TRADE_INPUT_EXAMPLE,
+        PRE_TRADE_COMPACT_INPUT_EXAMPLE,
         PRE_TRADE_INPUT_SCHEMA,
-        PRE_TRADE_OUTPUT_EXAMPLE,
+        PRE_TRADE_COMPACT_OUTPUT_EXAMPLE,
         PRE_TRADE_OUTPUT_SCHEMA,
     )
 
@@ -527,6 +609,10 @@ _BATCH_ENTRY_SCHEMA = {
     "properties": {
         "address": {"type": "string"},
         "status": {"type": "string", "enum": ["ok", "unknown"]},
+        "symbol": {
+            "type": ["string", "null"],
+            "description": "Compact mode only: the token's symbol (null when the token is UNKNOWN)",
+        },
         "verdict": {"type": "string", "enum": ["SOLID", "CAUTION", "DANGER", "UNKNOWN"]},
         "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
         "token": {"type": ["object", "null"]},
@@ -549,6 +635,11 @@ BATCH_INPUT_SCHEMA = {
             "maxItems": 25,
             "items": {"type": "string"},
             "description": "1-25 Base token contract addresses (0x...). Duplicates are screened once.",
+        },
+        "mode": {
+            "type": "string",
+            "enum": ["full", "compact"],
+            "description": "Optional response mode, default 'full'. 'full' returns every per-token verdict in full (signals, take, market data). 'compact' returns per-token address, symbol, verdict and score (plus the reason for UNKNOWN entries) and the summary counts — the same screen, a smaller response.",
         },
     },
 }
@@ -579,6 +670,8 @@ BATCH_OUTPUT_SCHEMA = {
             "description": "Evaluated tokens riskiest first; UNKNOWN entries last",
         },
         "not_checked": {"type": "string"},
+        "mode": {"type": "string", "enum": ["full", "compact"],
+                 "description": "The response mode that produced this result (echo of the request's mode, 'full' when omitted). Compact entries carry address/status/symbol/verdict/score/reason only."},
     },
 }
 
@@ -625,14 +718,59 @@ BATCH_OUTPUT_EXAMPLE = {
         },
     ],
     "not_checked": "Per-token limits apply: market structure only.",
+    "mode": "full",
+}
+
+# The listing's example pair is a COMPACT request/response, for the
+# same Settled sample-size reason as /v1/pre-trade (see the note
+# there): a full-mode entry alone is a complete per-token verdict and
+# cannot fit the ~1.5 KB published-sample limit honestly. The compact
+# response is a real, complete screen (per-token verdict + score in
+# riskiest-first order, plus the summary counts), so its real output
+# is what the listing publishes; full mode stays the default for
+# direct buyers. Tests pin this example byte-equal to a fresh compact
+# run on the fixture pair, and under the size limit.
+BATCH_COMPACT_INPUT_EXAMPLE = {**BATCH_INPUT_EXAMPLE, "mode": "compact"}
+
+BATCH_COMPACT_OUTPUT_EXAMPLE = {
+    "mode": "compact",
+    "chain": "base",
+    "requested_count": 2,
+    "unique_count": 2,
+    "evaluated_count": 1,
+    "unknown_count": 1,
+    "summary": {"SOLID": 0, "CAUTION": 1, "DANGER": 0, "UNKNOWN": 1},
+    "results": [
+        {
+            "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+            "status": "ok",
+            "symbol": "BASE",
+            "verdict": "CAUTION",
+            "score": 35.0,
+            "reason": None,
+        },
+        {
+            "address": "0x000000000000000000000000000000000000dEaD",
+            "status": "unknown",
+            "symbol": None,
+            "verdict": "UNKNOWN",
+            "score": None,
+            "reason": "No DEXScreener pair found for this token on base.",
+        },
+    ],
+    "not_checked": (
+        "Per-token limits apply (see each result's take): market "
+        "structure only — no contract honeypot simulation, no holder "
+        "concentration."
+    ),
 }
 
 
 def bazaar_batch_extension() -> dict:
     return _extension(
-        BATCH_INPUT_EXAMPLE,
+        BATCH_COMPACT_INPUT_EXAMPLE,
         BATCH_INPUT_SCHEMA,
-        BATCH_OUTPUT_EXAMPLE,
+        BATCH_COMPACT_OUTPUT_EXAMPLE,
         BATCH_OUTPUT_SCHEMA,
     )
 
@@ -717,9 +855,10 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                     "Combined go/no-go before a trade: PROCEED / CAUTION / "
                     "ABORT from the token's market verdict, the wallet's "
                     "sanctions/age/poisoning check, and (with a spender) its "
-                    "ERC-20 approvals. Use this when an agent is about to "
-                    "swap or pay and needs token + wallet + allowance risk "
-                    "in one call."
+                    "ERC-20 approvals. Mode 'compact' returns the decision "
+                    "plus per-leg summaries. Use this when an agent is about "
+                    "to swap or pay and needs token + wallet + allowance "
+                    "risk in one call."
                 ),
                 "tags": ["tokens", "wallets", "defi", "risk", "pre-trade", "agents"],
                 "accepts": _base_accepts(settings, settings.pre_trade_price_usdc),
@@ -736,8 +875,10 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                     "Screen 1-25 Base tokens in one flat-fee call: per-token "
                     "SOLID / CAUTION / DANGER verdicts with scores, sorted "
                     "riskiest first, plus summary counts; unfetchable tokens "
-                    "return UNKNOWN with a reason. Use this when an agent is "
-                    "screening a list of tokens before trading any of them."
+                    "return UNKNOWN with a reason. Mode 'compact' returns "
+                    "per-token verdict/score and the counts only. Use this "
+                    "when an agent is screening a list of tokens before "
+                    "trading any of them."
                 ),
                 "tags": ["tokens", "batch", "defi", "risk", "screening", "agents"],
                 "accepts": _base_accepts(settings, settings.batch_verdict_price_usdc),
@@ -795,16 +936,27 @@ One combined go/no-go before a trade: `verdict` PROCEED / CAUTION / ABORT with
 a combined risk `score`. Body: `token_address` (required), `chain` (optional,
 default `base`), `wallet_address` (optional — adds the wallet leg: OFAC
 sanctions snapshot, age/activity, address-poisoning signals), `spender`
-(optional — with a wallet, adds the allowance leg for that spender). A leg
+(optional — with a wallet, adds the allowance leg for that spender), `mode`
+(optional: `"full"` default, or `"compact"`). A leg
 that cannot be evaluated returns status `unknown` and caps the verdict at
 CAUTION; if no leg can be evaluated the call fails with 502 and no payment
 settles.
 
 `POST {base_url}/v1/batch-verdict` — {settings.batch_verdict_price_usdc} USDC flat, Base only.
-Body: `token_addresses` — 1 to 25 Base token addresses. Returns per-token
+Body: `token_addresses` — 1 to 25 Base token addresses, `mode` (optional:
+`"full"` default, or `"compact"`). Returns per-token
 verdicts sorted riskiest first plus summary counts. A token that cannot be
 fetched returns verdict UNKNOWN with a reason; if more than half the batch
 cannot be fetched the call fails with 502 and no payment settles.
+
+Both routes take `mode`. In compact mode the response is smaller and runs
+the identical computation: pre-trade returns the decision, `worst_leg`, and
+one summary per leg (`leg` / `status` / `verdict` / `score` / `headline` —
+the leg's headline reason); batch-verdict returns per-token `address` /
+`symbol` / `verdict` / `score` (plus `reason` for UNKNOWN entries) and the
+summary counts, in the same riskiest-first order. Everything needed to act
+is in the compact response; full mode adds the nested detail (signals,
+market data, sanctions/poisoning breakdowns, takes). Same price either way.
 
 ## Free endpoints
 
@@ -831,8 +983,8 @@ Paid API: token risk verdicts. Price: {settings.price_usdc} USDC per call, x402 
 ## Endpoints
 
 - POST {base_url}/v1/verdict — paid {settings.price_usdc}. Body: {{"address": str, "chain"?: str}}
-- POST {base_url}/v1/pre-trade — paid {settings.pre_trade_price_usdc}, Base. Body: {{"token_address": str, "chain"?: str, "wallet_address"?: str, "spender"?: str}} — combined PROCEED / CAUTION / ABORT from token + wallet + allowance legs
-- POST {base_url}/v1/batch-verdict — paid {settings.batch_verdict_price_usdc} flat, Base. Body: {{"token_addresses": [str, ...]}} — 1-25 tokens, per-token verdicts riskiest first + summary counts
+- POST {base_url}/v1/pre-trade — paid {settings.pre_trade_price_usdc}, Base. Body: {{"token_address": str, "chain"?: str, "wallet_address"?: str, "spender"?: str, "mode"?: "full"|"compact"}} — combined PROCEED / CAUTION / ABORT from token + wallet + allowance legs; compact returns the decision + worst leg + per-leg summaries
+- POST {base_url}/v1/batch-verdict — paid {settings.batch_verdict_price_usdc} flat, Base. Body: {{"token_addresses": [str, ...], "mode"?: "full"|"compact"}} — 1-25 tokens, per-token verdicts riskiest first + summary counts; compact returns per-token verdict/score + counts only
 - GET {base_url}/quote — free price quote
 - GET {base_url}/health — free liveness check
 - GET {base_url}/.well-known/x402 — manifest

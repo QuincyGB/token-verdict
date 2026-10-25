@@ -134,8 +134,9 @@ PRE_TRADE_DESCRIPTION = (
     "ABORT from the token's market verdict, the counterparty wallet's "
     "sanctions, age and poisoning check, and — with a spender — its ERC-20 "
     "approvals. A leg that cannot be evaluated returns unknown and caps "
-    "the verdict at CAUTION. Use this when an agent is about to swap, pay, "
-    "or route funds and needs token + wallet risk in a single call."
+    "the verdict at CAUTION. Mode 'compact' returns the decision, the "
+    "worst leg, and one summary per leg. Use this when an agent is about "
+    "to swap, pay, or route funds and needs token + wallet risk in one call."
 )
 
 BATCH_DESCRIPTION = (
@@ -143,8 +144,9 @@ BATCH_DESCRIPTION = (
     "CAUTION / DANGER verdicts with scores and signals, sorted riskiest "
     "first, plus summary counts; tokens that cannot be fetched return "
     "UNKNOWN with a reason, and if most of the batch fails the call fails "
-    "unsettled. Use this when an agent holds a list of candidate tokens "
-    "and needs the risky ones flagged before trading any of them."
+    "unsettled. Mode 'compact' returns per-token verdict and score plus "
+    "the counts only. Use this when an agent holds a list of candidate "
+    "tokens and needs the risky ones flagged before trading any of them."
 )
 
 
@@ -233,6 +235,10 @@ class PreTradeRequest(BaseModel):
     chain: str = Field(default="base", description="Chain of the token leg: base | ethereum | solana (wallet legs are Base-only)")
     wallet_address: str | None = Field(default=None, description="Optional Base wallet to check (sanctions, age, poisoning)")
     spender: str | None = Field(default=None, description="Optional spender contract; with wallet_address adds the allowance leg")
+    mode: str = Field(
+        default="full",
+        description="'full' (default) returns every leg in full; 'compact' returns the decision, the worst leg, and one summary per leg",
+    )
 
 
 class BatchVerdictRequest(BaseModel):
@@ -240,6 +246,10 @@ class BatchVerdictRequest(BaseModel):
         min_length=1,
         max_length=25,
         description="1-25 Base token contract addresses (0x...); duplicates are screened once",
+    )
+    mode: str = Field(
+        default="full",
+        description="'full' (default) returns every per-token verdict in full; 'compact' returns per-token address, symbol, verdict and score plus the summary counts",
     )
 
 
@@ -690,7 +700,9 @@ async def pre_trade(req: PreTradeRequest):
             status_code=422,
         )
     try:
-        return await run_pre_trade(token, req.chain, wallet, spender)
+        return await run_pre_trade(token, req.chain, wallet, spender, mode=req.mode)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
     except TokenNotFound as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except PreTradeUnavailable as e:
@@ -707,7 +719,9 @@ async def batch_verdict(req: BatchVerdictRequest):
     failures come back UNKNOWN with a reason; if more than half the
     batch cannot be fetched the call is a 502 and does not settle."""
     try:
-        return await run_batch([a.strip() for a in req.token_addresses])
+        return await run_batch([a.strip() for a in req.token_addresses], mode=req.mode)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
     except BatchUnavailable as e:
         log.warning("batch unavailable: %s", e)
         return JSONResponse({"error": str(e)}, status_code=502)
