@@ -15,6 +15,7 @@ import logging
 import os
 
 from fastapi import FastAPI, Request
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 from x402.http import FacilitatorConfig, HTTPFacilitatorClient, PaymentOption, RouteConfig
@@ -24,7 +25,7 @@ from x402.mechanisms.svm.exact.server import ExactSvmScheme as ExactSvmServerSch
 from x402.server import x402ResourceServer
 
 from .config import load_settings
-from .discovery import bazaar_extension, llms_txt, skill_md, x402_manifest
+from .discovery import OWNERSHIP_PROOFS, bazaar_extension, llms_txt, skill_md, x402_manifest
 from .solana_rail import SvmReplayGuard, make_after_settle_hook, make_before_verify_hook
 from .verdict import TokenNotFound, analyze
 
@@ -127,6 +128,23 @@ routes = {
 
 # --- app ---------------------------------------------------------------------
 app = FastAPI(title="token-verdict", version="1.0.0")
+
+
+def _openapi_with_ownership_proofs():
+    """Default OpenAPI document plus the x402scan ownership-proof root
+    keys (x-discovery / x-agentcash-provenance). x402scan reads these to
+    verify control of the payTo address — see OWNERSHIP_PROOFS in
+    discovery.py; removing them un-verifies the listing."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    schema["x-discovery"] = {"ownershipProofs": OWNERSHIP_PROOFS}
+    schema["x-agentcash-provenance"] = {"ownershipProofs": OWNERSHIP_PROOFS}
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _openapi_with_ownership_proofs
 
 # Build the payment middleware ONCE. Constructing it runs the SDK's
 # initialize(), which synchronously fetches the facilitator's /supported
