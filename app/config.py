@@ -34,6 +34,14 @@ PAYAI_FACILITATOR_URL = "https://facilitator.payai.network"
 # DEXScreener free API (no key) — token market data.
 DEXSCREENER_API = "https://api.dexscreener.com"
 
+# Public Base JSON-RPC (no key) — pre-trade wallet/allowance legs.
+BASE_RPC_URL = "https://mainnet.base.org"
+
+# Blockscout's Base instance (free API, no key) — pre-trade wallet leg.
+# Intermittently serves a Cloudflare challenge instead of JSON; every
+# field sourced from it degrades to "unknown" when that happens.
+BLOCKSCOUT_BASE_URL = "https://base.blockscout.com"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -58,6 +66,13 @@ class Settings:
     # /v1/verdict/rapidapi route; unset = route disabled. See
     # rapidapi-bypass-spec (platform-signups pack).
     rapidapi_proxy_secret: str | None = None
+    # /v1/pre-trade and /v1/batch-verdict prices (defaults ARE the spec
+    # prices; env overrides exist for parity with X402_PRICE_USDC).
+    pre_trade_price_usdc: str = "$0.05"
+    batch_verdict_price_usdc: str = "$0.20"
+    # Base chain-read upstreams for the pre-trade legs (both free, no key).
+    base_rpc_url: str = BASE_RPC_URL
+    blockscout_base_url: str = BLOCKSCOUT_BASE_URL
 
     @property
     def use_cdp(self) -> bool:
@@ -122,5 +137,13 @@ def load_settings() -> Settings:
         solana_usdc_mint=os.environ.get("X402_SOLANA_USDC_MINT", SOLANA_USDC_MINT).strip(),
         solana_rpc_url=os.environ.get("SOLANA_RPC_URL", "").strip() or None,
         rapidapi_proxy_secret=rapidapi_proxy_secret,
+        pre_trade_price_usdc=os.environ.get("X402_PRICE_PRE_TRADE_USDC", "$0.05").strip(),
+        batch_verdict_price_usdc=os.environ.get(
+            "X402_PRICE_BATCH_VERDICT_USDC", "$0.20"
+        ).strip(),
+        base_rpc_url=os.environ.get("BASE_RPC_URL", BASE_RPC_URL).strip(),
+        blockscout_base_url=os.environ.get(
+            "BLOCKSCOUT_BASE_URL", BLOCKSCOUT_BASE_URL
+        ).strip(),
         **{k.lower(): v for k, v in cdp_keys.items() if v is not None},
     )
