@@ -160,6 +160,19 @@ def test_example_validates_against_output_schema():
     jsonschema.validate(instance=VERDICT_OUTPUT_EXAMPLE, schema=VERDICT_OUTPUT_SCHEMA)
 
 
+def test_example_stays_under_settled_sample_size_limit():
+    # Settled compares a delivered response against the listing's
+    # sample, but its parser drops samples above ~1.5 KB and grades
+    # purchases nothing_to_compare instead. Fleet evidence 2026-10-25:
+    # every sample <=1,453 serialized bytes was kept (RouteVerdict
+    # /v1/check at 1,453 is the largest kept); this example at 1,721
+    # and ListSmith /fix at 4,972 were dropped. Pin the size so the
+    # sample cannot silently grow back over the line.
+    import json
+
+    assert len(json.dumps(VERDICT_OUTPUT_EXAMPLE)) <= 1450
+
+
 def test_engine_output_validates_against_output_schema():
     # The dead-market fixture pair from test_verdict.py, assembled exactly
     # the way analyze() assembles its return value.

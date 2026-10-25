@@ -145,13 +145,13 @@ VERDICT_OUTPUT_EXAMPLE = {
             "name": "Liquidity depth",
             "score": 5,
             "weight": 3,
-            "detail": "Deep liquidity ($259,106) — the book can absorb real selling.",
+            "detail": "Deep liquidity ($259,106) — absorbs real selling.",
         },
         {
             "name": "Volume churn",
             "score": 60,
             "weight": 2,
-            "detail": "24h volume is just $0 — effectively no market.",
+            "detail": "24h volume is $0 — effectively no market.",
         },
         {
             "name": "Sell pressure",
@@ -169,7 +169,7 @@ VERDICT_OUTPUT_EXAMPLE = {
             "name": "Trader breadth",
             "score": 70,
             "weight": 1,
-            "detail": "Only 3 transactions in 24h — a handful of wallets IS the market.",
+            "detail": "3 transactions in 24h — a handful of wallets is the market.",
         },
         {
             "name": "Pair age",
@@ -178,16 +178,22 @@ VERDICT_OUTPUT_EXAMPLE = {
             "detail": "Pair has meaningful history.",
         },
     ],
+    # The take below is the real capture's take with its prose trimmed
+    # (same facts, same numbers — the chart URL already lives in
+    # market.pair_url). Reason: Settled's listing parser drops output
+    # samples above ~1.5 KB and then grades scout purchases
+    # nothing_to_compare ("the listing has no sample response to
+    # compare against") — at 1,721 bytes this example was dropped
+    # while every fleet sample <=1,453 bytes was kept (evidence:
+    # Settled receipts + its /discovery/resources copies, 2026-10-25).
+    # test_bazaar_discovery pins the serialized size so the sample
+    # cannot silently grow back over the line.
     "take": (
-        "BASE (Base King) trades at $0.0003238 on uniswap with $259.1k in "
-        "liquidity. Trading has effectively stopped — $0 of volume across "
-        "3 transactions in 24h — so this is a dormant book, not a live "
-        "market, whatever the liquidity figure says. Verdict: CAUTION — "
-        "tradable at most in small size, and the signals above are why. "
-        "Don't chase green candles. Not checked: contract honeypot "
-        "simulation and holder concentration (need a paid indexer) — this "
-        "verdict covers market structure only. Chart: "
-        "https://dexscreener.com/base/0x2821d96b5fc81aec3763340b375a846a89a3ec1b"
+        "BASE (Base King) trades at $0.0003238 on uniswap; $259.1k "
+        "liquidity. Trading has stopped — $0 volume across 3 transactions "
+        "in 24h — a dormant book, not a live market. "
+        "Verdict: CAUTION — small size at most. Not checked: honeypot "
+        "simulation and holder concentration — market structure only."
     ),
     "market": {
         "price_usd": "0.0003238",
