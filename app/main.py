@@ -225,6 +225,31 @@ async def x402_middleware(request: Request, call_next):
     return await _payment_middleware(request, call_next)
 
 
+# Request-body cap (security audit 2026-10-25): every legitimate body in
+# this API is a small JSON document; an uncapped body lets a caller
+# stream unbounded bytes at the parser. Chunked bodies without a
+# Content-Length are the residual gap (terminated at the edge).
+_MAX_BODY_BYTES = 1024 * 1024
+
+
+@app.middleware("http")
+async def _body_cap(request: Request, call_next):
+    length = request.headers.get("content-length")
+    if length is not None and length.isdigit() and int(length) > _MAX_BODY_BYTES:
+        return JSONResponse({"error": "request body too large"}, status_code=413)
+    return await call_next(request)
+
+
+def _scrub_upstreams(text: str) -> str:
+    """Never echo a configured upstream URL in an error body: an RPC or
+    indexer URL can carry an API key in its path (security audit
+    2026-10-25)."""
+    for url in (settings.base_rpc_url, settings.blockscout_base_url):
+        if url:
+            text = text.replace(url, "[upstream]")
+    return text
+
+
 class VerdictRequest(BaseModel):
     address: str = Field(description="Token contract address (0x...)")
     chain: str = Field(default="base", description="Chain id label: base | ethereum | solana")
@@ -657,15 +682,21 @@ async def _run_verdict(req: VerdictRequest):
     """The verdict pipeline — shared by the x402 route and the
     RapidAPI route so both return identical bytes."""
     address = req.address.strip()
-    if not address.startswith("0x") or len(address) != 42:
+    if not is_address(address):
         return JSONResponse({"error": "address must be a 0x contract address"}, status_code=422)
+    if req.chain.lower() not in ("base", "ethereum", "solana"):
+        return JSONResponse(
+            {"error": "chain must be one of: base, ethereum, solana"}, status_code=422
+        )
     try:
         result = await analyze(address, req.chain)
     except TokenNotFound as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     except Exception as e:  # noqa: BLE001 — never leak tracebacks to callers
         log.exception("verdict failed for %s", address)
-        return JSONResponse({"error": f"analysis failed: {e}"}, status_code=502)
+        return JSONResponse(
+            {"error": _scrub_upstreams(f"analysis failed: {e}")}, status_code=502
+        )
     return result
 
 
@@ -683,6 +714,10 @@ async def pre_trade(req: PreTradeRequest):
     token = req.token_address.strip()
     if not is_address(token):
         return JSONResponse({"error": "token_address must be a 0x contract address"}, status_code=422)
+    if req.chain.lower() not in ("base", "ethereum", "solana"):
+        return JSONResponse(
+            {"error": "chain must be one of: base, ethereum, solana"}, status_code=422
+        )
     wallet = req.wallet_address.strip() if req.wallet_address else None
     spender = req.spender.strip() if req.spender else None
     if wallet is not None and not is_address(wallet):
@@ -707,10 +742,14 @@ async def pre_trade(req: PreTradeRequest):
         return JSONResponse({"error": str(e)}, status_code=404)
     except PreTradeUnavailable as e:
         log.warning("pre-trade unavailable for %s: %s", token, e)
-        return JSONResponse({"error": f"pre-trade unavailable: {e}"}, status_code=502)
+        return JSONResponse(
+            {"error": _scrub_upstreams(f"pre-trade unavailable: {e}")}, status_code=502
+        )
     except Exception as e:  # noqa: BLE001 — never leak tracebacks to callers
         log.exception("pre-trade failed for %s", token)
-        return JSONResponse({"error": f"pre-trade failed: {e}"}, status_code=502)
+        return JSONResponse(
+            {"error": _scrub_upstreams(f"pre-trade failed: {e}")}, status_code=502
+        )
 
 
 @app.post("/v1/batch-verdict")
@@ -724,10 +763,12 @@ async def batch_verdict(req: BatchVerdictRequest):
         return JSONResponse({"error": str(e)}, status_code=422)
     except BatchUnavailable as e:
         log.warning("batch unavailable: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse({"error": _scrub_upstreams(str(e))}, status_code=502)
     except Exception as e:  # noqa: BLE001 — never leak tracebacks to callers
         log.exception("batch verdict failed")
-        return JSONResponse({"error": f"batch failed: {e}"}, status_code=502)
+        return JSONResponse(
+            {"error": _scrub_upstreams(f"batch failed: {e}")}, status_code=502
+        )
 
 
 @app.post("/v1/verdict/rapidapi")
