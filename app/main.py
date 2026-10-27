@@ -791,6 +791,23 @@ async def batch_verdict(req: BatchVerdictRequest):
         )
 
 
+@app.post("/v1/internal/verdict")
+async def verdict_internal(req: VerdictRequest, request: Request):
+    """Fleet-internal unpaid path for StallRow's /v1/orchestrate.
+    Same secret discipline as the RapidAPI route: FLEET_INTERNAL_SECRET
+    unset = 404 (the route does not exist), wrong secret = 403.
+    Deliberately absent from the x402 routes dict and from every
+    discovery surface — the secret never appears in any manifest."""
+    secret = settings.fleet_internal_secret
+    if not secret:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    presented = request.headers.get("x-fleet-internal-secret", "")
+    if not hmac.compare_digest(presented, secret):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    log.info("fleet-internal verdict call (orchestrate)")
+    return await _run_verdict(req)
+
+
 @app.post("/v1/verdict/rapidapi")
 async def verdict_rapidapi(req: VerdictRequest, request: Request):
     """RapidAPI gateway route — RapidAPI has already authenticated and

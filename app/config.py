@@ -66,6 +66,10 @@ class Settings:
     # /v1/verdict/rapidapi route; unset = route disabled. See
     # rapidapi-bypass-spec (platform-signups pack).
     rapidapi_proxy_secret: str | None = None
+    # Fleet-internal shared secret (optional). Gates the unpaid
+    # /v1/internal/verdict route that StallRow's /v1/orchestrate
+    # fans out to; unset = route disabled (404). Never in discovery.
+    fleet_internal_secret: str | None = None
     # /v1/pre-trade and /v1/batch-verdict prices (defaults ARE the spec
     # prices; env overrides exist for parity with X402_PRICE_USDC).
     pre_trade_price_usdc: str = "$0.05"
@@ -137,6 +141,7 @@ def load_settings() -> Settings:
         solana_usdc_mint=os.environ.get("X402_SOLANA_USDC_MINT", SOLANA_USDC_MINT).strip(),
         solana_rpc_url=os.environ.get("SOLANA_RPC_URL", "").strip() or None,
         rapidapi_proxy_secret=rapidapi_proxy_secret,
+        fleet_internal_secret=os.environ.get("FLEET_INTERNAL_SECRET", "").strip() or None,
         pre_trade_price_usdc=os.environ.get("X402_PRICE_PRE_TRADE_USDC", "$0.05").strip(),
         batch_verdict_price_usdc=os.environ.get(
             "X402_PRICE_BATCH_VERDICT_USDC", "$0.20"
