@@ -127,6 +127,11 @@ VERDICT_DESCRIPTION = (
     "agents screening tokens before touching them. Use this when an agent "
     "is about to buy, swap, or route funds into a token and needs a fast "
     "risk screen first."
+    + (
+        " Payable in USDC on Base or Solana — same price on either rail."
+        if settings.solana_enabled
+        else ""
+    )
 )
 
 PRE_TRADE_DESCRIPTION = (
@@ -308,7 +313,7 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Token Verdict — pay-per-call token risk verdicts for AI agents</title>
-<meta name="description" content="Before an AI agent spends real money on a token, it pays $0.02 to ask Token Verdict first. SOLID / CAUTION / DANGER verdicts over x402 on Base. No accounts, no API keys: payment is the authentication.">
+<meta name="description" content="Before an AI agent spends real money on a token, it pays $0.02 to ask Token Verdict first. SOLID / CAUTION / DANGER verdicts over x402 — payable in USDC on Base or Solana. No accounts, no API keys: payment is the authentication.">
 <style>
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
          max-width: 760px; margin: 40px auto; padding: 0 20px 60px;
@@ -335,7 +340,7 @@ LANDING_HTML = """<!DOCTYPE html>
 for the agent economy. No accounts, no API keys: <em>payment is the
 authentication.</em></p>
 
-<p><span class="pill">Live on Base mainnet</span>
+<p><span class="pill">Live on Base + Solana mainnet</span>
 <span class="pill">x402 v2 · exact scheme</span>
 <span class="pill">$0.02 USDC / call</span></p>
 
@@ -357,7 +362,7 @@ authentication.</em></p>
   -H 'content-type: application/json' \\
   -d '{"address":"0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b","chain":"base"}'</pre>
 <p>Unpaid calls return an HTTP 402 x402 challenge (price, asset, network,
-pay-to wallet). Pay $0.02 USDC on Base with any x402 v2 client, retry with
+pay-to wallet). Pay $0.02 USDC on Base or Solana with any x402 v2 client, retry with
 the payment header, and the verdict comes back. There is no signup and no
 key to manage — the settlement is the credential.</p>
 

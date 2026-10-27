@@ -820,8 +820,9 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
             "SOLID / CAUTION / DANGER with a 0-100 score, six weighted "
             "market-structure signals and a written analyst take. Built for "
             "AI agents screening tokens — no API key, no signup, "
-            f"{settings.price_usdc} USDC per call. "
-            "Use this when an agent is about to buy, swap, or route funds "
+            f"{settings.price_usdc} USDC per call"
+            + (" on Base or Solana. " if settings.solana_enabled else " on Base. ")
+            + "Use this when an agent is about to buy, swap, or route funds "
             "into a token and needs a fast risk screen first."
         ),
         "network": settings.network,

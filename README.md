@@ -6,7 +6,7 @@ back: **SOLID / CAUTION / DANGER**, a 0–100 score, six weighted
 market-structure signals explained in plain English, and a written analyst
 take.
 
-Buyers pay **$0.02 USDC per call** on Base via the
+Buyers pay **$0.02 USDC per call** on Base or Solana via the
 [x402 protocol](https://x402.org) (HTTP 402). No accounts, no API keys —
 **payment is the authentication**: any agent with a wallet can call it
 mid-decision, with no human ever visiting a website.
