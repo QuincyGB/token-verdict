@@ -347,15 +347,47 @@ def test_app_routes_advertise_solana_only_when_enabled(monkeypatch):
     monkeypatch.setenv("SOLANA_RAIL_ENABLED", "1")
     try:
         importlib.reload(main_module)
-        accepts = main_module.routes["POST /v1/verdict"].accepts
-        by_network = {str(a.network): a for a in accepts}
-        assert BASE_NETWORK in by_network and NETWORK in by_network
-        assert by_network[NETWORK].pay_to == PAY_TO
+        # All three paid routes advertise the Solana accept when the rail
+        # is enabled — the payment rail is per-route price only. (The
+        # live dual-accept 402s are verified against production after
+        # deploy; this file runs offline by design.)
+        expected_price = {
+            "POST /v1/verdict": "$0.02",
+            "POST /v1/pre-trade": "$0.05",
+            "POST /v1/batch-verdict": "$0.20",
+        }
+        for route, price in expected_price.items():
+            accepts = main_module.routes[route].accepts
+            by_network = {str(a.network): a for a in accepts}
+            assert BASE_NETWORK in by_network and NETWORK in by_network, route
+            assert by_network[NETWORK].pay_to == PAY_TO, route
+            assert by_network[NETWORK].price == price, route
+            assert by_network[BASE_NETWORK].price == price, route
     finally:
         monkeypatch.delenv("SOLANA_RAIL_ENABLED", raising=False)
         importlib.reload(main_module)
-    accepts = main_module.routes["POST /v1/verdict"].accepts
-    assert [str(a.network) for a in accepts] == [BASE_NETWORK]
+    for route in ("POST /v1/verdict", "POST /v1/pre-trade", "POST /v1/batch-verdict"):
+        accepts = main_module.routes[route].accepts
+        assert [str(a.network) for a in accepts] == [BASE_NETWORK], route
+
+
+def test_manifest_other_routes_advertise_both_networks_when_enabled(monkeypatch):
+    monkeypatch.setenv("SOLANA_RAIL_ENABLED", "1")
+    settings = load_settings()
+    manifest = x402_manifest(settings, "https://example.test")
+    by_resource = {r["resource"]: r for r in manifest["resources"]}
+    pre = by_resource["https://example.test/v1/pre-trade"]["accepts"]
+    batch = by_resource["https://example.test/v1/batch-verdict"]["accepts"]
+    assert [a["network"] for a in pre] == [BASE_NETWORK, NETWORK]
+    assert [a["network"] for a in batch] == [BASE_NETWORK, NETWORK]
+    assert pre[1]["amount"] == "50000" and pre[1]["asset"] == MINT and pre[1]["payTo"] == PAY_TO
+    assert batch[1]["amount"] == "200000" and batch[1]["asset"] == MINT and batch[1]["payTo"] == PAY_TO
+
+    monkeypatch.delenv("SOLANA_RAIL_ENABLED", raising=False)
+    manifest = x402_manifest(load_settings(), "https://example.test")
+    by_resource = {r["resource"]: r for r in manifest["resources"]}
+    assert len(by_resource["https://example.test/v1/pre-trade"]["accepts"]) == 1
+    assert len(by_resource["https://example.test/v1/batch-verdict"]["accepts"]) == 1
 
 
 def test_manifest_advertises_both_networks_when_enabled(monkeypatch):

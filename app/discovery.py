@@ -775,27 +775,14 @@ def bazaar_batch_extension() -> dict:
     )
 
 
-def _base_accepts(settings: Settings, price_usdc: str) -> list[dict]:
-    return [
-        {
-            "scheme": "exact",
-            "network": settings.network,
-            "amount": _price_to_units(price_usdc),
-            "asset": USDC_ASSET,
-            "payTo": settings.pay_to,
-            "maxTimeoutSeconds": 300,
-        }
-    ]
-
-
-def x402_manifest(settings: Settings, base_url: str) -> dict:
-    # accepts[] mirrors the live 402 challenge so directory validators
-    # (Agent Bazaar, x402scan) accept the manifest.
+def _accepts_for(settings: Settings, price_usdc: str) -> list[dict]:
+    """Accepts for one route at `price_usdc`: Base always, plus Solana
+    when the rail is enabled — mirrors the live 402 challenge per route."""
     accepts = [
         {
             "scheme": "exact",
             "network": settings.network,
-            "amount": _price_to_units(settings.price_usdc),
+            "amount": _price_to_units(price_usdc),
             "asset": USDC_ASSET,
             "payTo": settings.pay_to,
             "maxTimeoutSeconds": 300,
@@ -806,12 +793,19 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
             {
                 "scheme": "exact",
                 "network": settings.solana_network,
-                "amount": _price_to_units(settings.price_usdc),
+                "amount": _price_to_units(price_usdc),
                 "asset": settings.solana_usdc_mint,
                 "payTo": settings.solana_pay_to,
                 "maxTimeoutSeconds": 300,
             }
         )
+    return accepts
+
+
+def x402_manifest(settings: Settings, base_url: str) -> dict:
+    # accepts[] mirrors the live 402 challenge so directory validators
+    # (Agent Bazaar, x402scan) accept the manifest.
+    accepts = _accepts_for(settings, settings.price_usdc)
     manifest = {
         "x402Version": 2,
         "service": settings.service_name,
@@ -860,9 +854,14 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                     "plus per-leg summaries. Use this when an agent is about "
                     "to swap or pay and needs token + wallet + allowance "
                     "risk in one call."
+                    + (
+                        " Payable in USDC on Base or Solana."
+                        if settings.solana_enabled
+                        else ""
+                    )
                 ),
                 "tags": ["tokens", "wallets", "defi", "risk", "pre-trade", "agents"],
-                "accepts": _base_accepts(settings, settings.pre_trade_price_usdc),
+                "accepts": _accepts_for(settings, settings.pre_trade_price_usdc),
                 "inputSchema": PRE_TRADE_INPUT_SCHEMA,
                 "outputSchema": PRE_TRADE_OUTPUT_SCHEMA,
             },
@@ -883,9 +882,14 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                     "(stall-row-production.up.railway.app/v1/recheck) to "
                     "watch the endpoints you depend on for price/payTo/schema "
                     "changes between screens."
+                    + (
+                        " Payable in USDC on Base or Solana."
+                        if settings.solana_enabled
+                        else ""
+                    )
                 ),
                 "tags": ["tokens", "batch", "defi", "risk", "screening", "agents"],
-                "accepts": _base_accepts(settings, settings.batch_verdict_price_usdc),
+                "accepts": _accepts_for(settings, settings.batch_verdict_price_usdc),
                 "inputSchema": BATCH_INPUT_SCHEMA,
                 "outputSchema": BATCH_OUTPUT_SCHEMA,
             },
@@ -935,7 +939,7 @@ network you paid on (Base, or Solana when the Solana rail is enabled).
 
 ## More paid endpoints
 
-`POST {base_url}/v1/pre-trade` — {settings.pre_trade_price_usdc} USDC, Base only.
+`POST {base_url}/v1/pre-trade` — {settings.pre_trade_price_usdc} USDC{", payable on Base or Solana" if settings.solana_enabled else ", Base only"}.
 One combined go/no-go before a trade: `verdict` PROCEED / CAUTION / ABORT with
 a combined risk `score`. Body: `token_address` (required), `chain` (optional,
 default `base`), `wallet_address` (optional — adds the wallet leg: OFAC
@@ -946,7 +950,7 @@ that cannot be evaluated returns status `unknown` and caps the verdict at
 CAUTION; if no leg can be evaluated the call fails with 502 and no payment
 settles.
 
-`POST {base_url}/v1/batch-verdict` — {settings.batch_verdict_price_usdc} USDC flat, Base only.
+`POST {base_url}/v1/batch-verdict` — {settings.batch_verdict_price_usdc} USDC flat{", payable on Base or Solana" if settings.solana_enabled else ", Base only"}.
 Body: `token_addresses` — 1 to 25 Base token addresses, `mode` (optional:
 `"full"` default, or `"compact"`). Returns per-token
 verdicts sorted riskiest first plus summary counts. A token that cannot be
@@ -987,8 +991,8 @@ Paid API: token risk verdicts. Price: {settings.price_usdc} USDC per call, x402 
 ## Endpoints
 
 - POST {base_url}/v1/verdict — paid {settings.price_usdc}. Body: {{"address": str, "chain"?: str}}
-- POST {base_url}/v1/pre-trade — paid {settings.pre_trade_price_usdc}, Base. Body: {{"token_address": str, "chain"?: str, "wallet_address"?: str, "spender"?: str, "mode"?: "full"|"compact"}} — combined PROCEED / CAUTION / ABORT from token + wallet + allowance legs; compact returns the decision + worst leg + per-leg summaries
-- POST {base_url}/v1/batch-verdict — paid {settings.batch_verdict_price_usdc} flat, Base. Body: {{"token_addresses": [str, ...], "mode"?: "full"|"compact"}} — 1-25 tokens, per-token verdicts riskiest first + summary counts; compact returns per-token verdict/score + counts only
+- POST {base_url}/v1/pre-trade — paid {settings.pre_trade_price_usdc}{", Base or Solana" if settings.solana_enabled else ", Base"}. Body: {{"token_address": str, "chain"?: str, "wallet_address"?: str, "spender"?: str, "mode"?: "full"|"compact"}} — combined PROCEED / CAUTION / ABORT from token + wallet + allowance legs; compact returns the decision + worst leg + per-leg summaries
+- POST {base_url}/v1/batch-verdict — paid {settings.batch_verdict_price_usdc} flat{", Base or Solana" if settings.solana_enabled else ", Base"}. Body: {{"token_addresses": [str, ...], "mode"?: "full"|"compact"}} — 1-25 tokens, per-token verdicts riskiest first + summary counts; compact returns per-token verdict/score + counts only
 - GET {base_url}/quote — free price quote
 - GET {base_url}/health — free liveness check
 - GET {base_url}/.well-known/x402 — manifest

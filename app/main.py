@@ -80,15 +80,6 @@ resource_server.register(settings.network, ExactEvmScheme())
 # Same facilitator: ultravioletadao's /supported lists x402 v2 exact on
 # solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp alongside eip155:8453, so the one
 # facilitator client settles both networks.
-_accepts = [
-    PaymentOption(
-        scheme="exact",
-        pay_to=settings.pay_to,
-        price=settings.price_usdc,
-        network=settings.network,
-    ),
-]
-
 if settings.solana_enabled:
     resource_server.register(
         settings.solana_network,
@@ -105,19 +96,42 @@ if settings.solana_enabled:
     resource_server.on_after_settle(
         make_after_settle_hook(_svm_replay_guard, solana_network=settings.solana_network)
     )
-    _accepts.append(
-        PaymentOption(
-            scheme="exact",
-            pay_to=settings.solana_pay_to,
-            price=settings.price_usdc,
-            network=settings.solana_network,
-        )
-    )
     log.info(
         "solana rail enabled: %s payTo %s",
         settings.solana_network,
         settings.solana_pay_to,
     )
+
+
+def _accepts_for(price: str) -> list[PaymentOption]:
+    """Payment rails for a route at `price`: Base always; Solana too when
+    the rail is enabled. The payment rail is independent of what a route
+    analyses — pre-trade's wallet/allowance legs read Base state and
+    batch-verdict screens Base tokens, but a caller may still PAY in
+    Solana USDC for either, exactly as on /v1/verdict: the resource
+    server settles whichever accept the caller picks, and the SVM hooks
+    validate the amount against that route's own requirements."""
+    options = [
+        PaymentOption(
+            scheme="exact",
+            pay_to=settings.pay_to,
+            price=price,
+            network=settings.network,
+        )
+    ]
+    if settings.solana_enabled:
+        options.append(
+            PaymentOption(
+                scheme="exact",
+                pay_to=settings.solana_pay_to,
+                price=price,
+                network=settings.solana_network,
+            )
+        )
+    return options
+
+
+_accepts = _accepts_for(settings.price_usdc)
 
 VERDICT_DESCRIPTION = (
     "Send a token contract address, get a risk verdict. Returns SOLID / "
@@ -142,6 +156,11 @@ PRE_TRADE_DESCRIPTION = (
     "the verdict at CAUTION. Mode 'compact' returns the decision, the "
     "worst leg, and one summary per leg. Use this when an agent is about "
     "to swap, pay, or route funds and needs token + wallet risk in one call."
+    + (
+        " Payable in USDC on Base or Solana — same price on either rail."
+        if settings.solana_enabled
+        else ""
+    )
 )
 
 BATCH_DESCRIPTION = (
@@ -152,20 +171,12 @@ BATCH_DESCRIPTION = (
     "unsettled. Mode 'compact' returns per-token verdict and score plus "
     "the counts only. Use this when an agent holds a list of candidate "
     "tokens and needs the risky ones flagged before trading any of them."
+    + (
+        " Payable in USDC on Base or Solana — same price on either rail."
+        if settings.solana_enabled
+        else ""
+    )
 )
-
-
-def _base_only(price: str) -> list[PaymentOption]:
-    """The two new routes are Base-only (their wallet/allowance legs read
-    Base state); the Solana rail stays exclusive to /v1/verdict."""
-    return [
-        PaymentOption(
-            scheme="exact",
-            pay_to=settings.pay_to,
-            price=price,
-            network=settings.network,
-        )
-    ]
 
 
 routes = {
@@ -178,7 +189,7 @@ routes = {
         extensions={"bazaar": bazaar_extension()},
     ),
     "POST /v1/pre-trade": RouteConfig(
-        accepts=_base_only(settings.pre_trade_price_usdc),
+        accepts=_accepts_for(settings.pre_trade_price_usdc),
         description=PRE_TRADE_DESCRIPTION,
         mime_type="application/json",
         service_name=settings.service_name,
@@ -186,7 +197,7 @@ routes = {
         extensions={"bazaar": bazaar_pre_trade_extension()},
     ),
     "POST /v1/batch-verdict": RouteConfig(
-        accepts=_base_only(settings.batch_verdict_price_usdc),
+        accepts=_accepts_for(settings.batch_verdict_price_usdc),
         description=BATCH_DESCRIPTION,
         mime_type="application/json",
         service_name=settings.service_name,
