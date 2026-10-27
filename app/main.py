@@ -712,6 +712,11 @@ async def _run_verdict(req: VerdictRequest):
         return JSONResponse(
             {"error": _scrub_upstreams(f"analysis failed: {e}")}, status_code=502
         )
+    # Accuracy ledger: record every served verdict for the published
+    # +7d/+30d scoring pipeline. Never raises (see app/ledger.py).
+    from . import ledger as _ledger
+
+    _ledger.record_verdict(result)
     return result
 
 
