@@ -7,16 +7,24 @@ Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base;
         POST /v1/batch-verdict ($0.20 flat, Base) — 1-25 token screen
 Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
         /example (one verdict end to end, for humans)
+        POST /v1/nudge (fleet-health nudge inbox — signed mail, not
+        a product) and POST /v1/internal/nudges (owner read, gated
+        by the fleet internal secret like /v1/internal/verdict)
 """
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import html
+import ipaddress
 import json
 import logging
 import os
+import socket
+from urllib.parse import urljoin, urlparse
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -39,6 +47,8 @@ from .discovery import (
     skill_md,
     x402_manifest,
 )
+from . import nudge as nudge_svc
+from .nudge import NudgeStore, resolve_nudge_path
 from .pretrade import PreTradeUnavailable, run_pre_trade
 from .solana_rail import SvmReplayGuard, make_after_settle_hook, make_before_verify_hook
 from .verdict import TokenNotFound, analyze
@@ -47,6 +57,10 @@ log = logging.getLogger("token-verdict")
 logging.basicConfig(level=logging.INFO)
 
 settings = load_settings()  # raises if payout wallet is a placeholder
+
+# Fleet-health nudge inbox store (app/nudge.py): signed inbound mail
+# in a small sqlite file; path resolution mirrors app/ledger.py.
+_nudge_store = NudgeStore(resolve_nudge_path())
 
 # --- x402 wiring -------------------------------------------------------------
 # The facilitator is chosen by X402_FACILITATOR_URL alone (plus CDP keys for
@@ -822,6 +836,190 @@ async def verdict_internal(req: VerdictRequest, request: Request):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     log.info("fleet-internal verdict call (orchestrate)")
     return await _run_verdict(req)
+
+
+# --- Nudge inbox ------------------------------------------------------------------
+# The two-way leg of Fleet Check (app/nudge.py; spec:
+# x402-loop-kits/nudge-inbox.md). POST /v1/nudge is FREE — inbound
+# mail is not a product, and it is absent from the x402 `routes`
+# dict and every priced surface, so the priced route count does
+# not move. Every message is EIP-191-signed; unsigned or
+# wrongly-signed mail is a clean 4xx, never a 5xx. The owner reads
+# the inbox through the fleet-internal gate, same discipline as
+# /v1/internal/verdict: secret unset = 404, wrong secret = 403.
+
+class NudgeInboxReadRequest(BaseModel):
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+# SSRF discipline for the one arbitrary-URL fetch this service
+# makes (the opt-out verifier's discovery-doc read), modelled on
+# route-verdict's checker guard: only http(s), the host must
+# resolve exclusively to public addresses, every redirect hop is
+# re-checked BEFORE it is fetched, and the body is read under a
+# hard size cap.
+_MAX_DISCOVERY_BYTES = 2 * 1024 * 1024
+_MAX_DISCOVERY_REDIRECTS = 5
+_DISCOVERY_TIMEOUT_S = 5.0
+
+
+def _ssrf_check(url: str) -> None:
+    """Reject non-http(s) URLs and any host resolving to a private,
+    loopback, link-local, reserved, or multicast address."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"URL scheme must be http or https, got {parsed.scheme!r}")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("URL has no host")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ValueError(f"host does not resolve: {host}") from e
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValueError(f"URL host resolves to a non-public address ({ip})")
+
+
+async def _fetch_discovery_doc(url: str) -> tuple[int, bytes]:
+    """One SSRF-guarded GET with manual redirect following — every
+    hop is re-checked before it is fetched, and the body is read
+    under a hard size cap."""
+    current = url
+    async with httpx.AsyncClient(follow_redirects=False) as client:
+        for hop in range(_MAX_DISCOVERY_REDIRECTS + 1):
+            await asyncio.to_thread(_ssrf_check, current)
+            async with client.stream(
+                "GET", current, timeout=_DISCOVERY_TIMEOUT_S
+            ) as resp:
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("location")
+                    if not location or hop == _MAX_DISCOVERY_REDIRECTS:
+                        return resp.status_code, b""
+                    current = urljoin(current, location)
+                    continue
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in resp.aiter_bytes():
+                    total += len(chunk)
+                    if total > _MAX_DISCOVERY_BYTES:
+                        raise ValueError("discovery doc exceeds the size cap")
+                    chunks.append(chunk)
+                return resp.status_code, b"".join(chunks)
+    return 0, b""  # pragma: no cover — the loop always returns
+
+
+async def _stall_pay_to(stall: str) -> str | None:
+    """The payTo a stall's own discovery doc publishes — the
+    opt-out verifier's ground truth for who controls that stall.
+    Fetched under the SSRF discipline above."""
+    try:
+        status, body = await _fetch_discovery_doc(
+            f"{stall.rstrip('/')}/.well-known/x402"
+        )
+    except Exception:  # noqa: BLE001 — an unreadable doc proves nothing
+        return None
+    if status != 200 or not body:
+        return None
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return None
+    pay_to = doc.get("payTo") if isinstance(doc, dict) else None
+    return pay_to if isinstance(pay_to, str) else None
+
+
+@app.post("/v1/nudge")
+async def nudge_inbox(request: Request):
+    """Receive one fleet-health nudge (or opt-out). The message is
+    validated structurally, then its signature must recover to the
+    claimed sender wallet, then — for nudges — the per-sender rate
+    limit applies. Verified nudges are stored deduped; opt-outs
+    must be signed by the payTo the named stall's own discovery
+    doc publishes, and are recorded for the sender engine."""
+    try:
+        raw = await request.body()
+        message = json.loads(raw) if raw else None
+    except ValueError:
+        return JSONResponse(
+            {"error": "body must be a JSON object"}, status_code=400
+        )
+    try:
+        nudge_svc.validate_message(message)
+        nudge_svc.verify_sender(message)
+    except nudge_svc.NudgeError as e:
+        return JSONResponse({"error": str(e)}, status_code=e.http_status)
+    if message["kind"] == nudge_svc.KIND_OPT_OUT:
+        pay_to = await _stall_pay_to(message["stall"])
+        if pay_to is None:
+            return JSONResponse(
+                {
+                    "error": "could not read the stall's discovery "
+                    "doc to verify payTo control"
+                },
+                status_code=422,
+            )
+        if pay_to.lower() != message["sender"].lower():
+            return JSONResponse(
+                {
+                    "error": "opt-out must be signed by the stall's "
+                    "published payTo wallet"
+                },
+                status_code=403,
+            )
+        _nudge_store.record_optout(message["stall"], message["sender"])
+        return {
+            "ok": True,
+            "kind": message["kind"],
+            "opted_out": message["stall"].rstrip("/"),
+        }
+    if not nudge_svc.RATE_LIMITER.allow(
+        message["sender"], nudge_svc.rate_limit_per_hour()
+    ):
+        return JSONResponse(
+            {"error": "rate limit: too many nudges from this sender"},
+            status_code=429,
+        )
+    stored = _nudge_store.store_nudge(message, nudge_svc.dedupe_key(message))
+    return {
+        "ok": True,
+        "kind": message["kind"],
+        "stored": stored,
+        "duplicate": not stored,
+    }
+
+
+@app.post("/v1/internal/nudges")
+async def nudge_inbox_read(
+    req: NudgeInboxReadRequest | None = None, request: Request = None
+):
+    """Owner read of the nudge inbox: stored nudges (newest first)
+    plus the opt-out registry. Fleet-internal secret gate, mirroring
+    /v1/internal/verdict exactly."""
+    secret = settings.fleet_internal_secret
+    if not secret:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    presented = request.headers.get("x-fleet-internal-secret", "")
+    if not hmac.compare_digest(presented, secret):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    limit = req.limit if req is not None else 50
+    return {
+        "count": _nudge_store.nudge_count(),
+        "nudges": _nudge_store.list_nudges(limit),
+        "optouts": _nudge_store.list_optouts(),
+    }
 
 
 @app.post("/v1/verdict/rapidapi")

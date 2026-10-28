@@ -7,6 +7,7 @@ live 402 responses, so they must stay consistent with main.py pricing.
 from __future__ import annotations
 
 from .config import Settings
+from .nudge import nudge_extension
 
 
 # x402 v2 "exact"-scheme asset for USDC on Base mainnet (6 decimals) — the
@@ -822,6 +823,11 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
         "network": settings.network,
         "payTo": settings.pay_to,
         "ownershipProofs": OWNERSHIP_PROOFS,
+        # The nudge inbox: this stall accepts signed fleet-health
+        # nudges (app/nudge.py; spec in x402-loop-kits). A top-level
+        # extension, NOT a resource — inbound mail is free and the
+        # priced route count does not move.
+        "extensions": {"nudge": nudge_extension(base_url)},
         "resources": [
             {
                 "resource": f"{base_url}/v1/verdict",

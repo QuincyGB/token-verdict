@@ -13,6 +13,10 @@ cdp-sdk>=1.0
 # (it also keeps solders<0.28, which x402 accepts).
 solana==0.38.0
 httpx>=0.27,<0.29
+# EIP-191 signature recovery for the fleet-health nudge inbox
+# (app/nudge.py). Already pulled in transitively by x402[evm];
+# named here because the service imports it directly.
+eth-account>=0.13
 
 # dev / test
 pytest>=8.0
