@@ -1,0 +1,90 @@
+{
+  "base_url": "https://token-verdict-production.up.railway.app",
+  "change_policy": {
+    "statement": "Prices and output schemas recorded here change only under a new signed manifest version, published before or with the change taking effect; changes are also announced in the fleet's public change record as they land. A served route whose price or schema fingerprint disagrees with the latest signed manifest is a defect — report it to patrol@verdictrow.com."
+  },
+  "issued_at": "2026-10-30T20:57:53Z",
+  "manifest": "verdict-row-stability/v1",
+  "pay_to": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+  "routes": [
+    {
+      "accepts": [
+        {
+          "amount": "20000",
+          "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "maxTimeoutSeconds": 300,
+          "network": "eip155:8453",
+          "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+          "scheme": "exact"
+        },
+        {
+          "amount": "20000",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "maxTimeoutSeconds": 300,
+          "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+          "payTo": "FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ",
+          "scheme": "exact"
+        }
+      ],
+      "method": "POST",
+      "resource": "https://token-verdict-production.up.railway.app/v1/verdict",
+      "schema_fingerprint": "sha256:004c0605d29371aded9a70cd87dd90b91c799433047c9b0c0da43e4801461862"
+    },
+    {
+      "accepts": [
+        {
+          "amount": "50000",
+          "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "maxTimeoutSeconds": 300,
+          "network": "eip155:8453",
+          "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+          "scheme": "exact"
+        },
+        {
+          "amount": "50000",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "maxTimeoutSeconds": 300,
+          "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+          "payTo": "FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ",
+          "scheme": "exact"
+        }
+      ],
+      "method": "POST",
+      "resource": "https://token-verdict-production.up.railway.app/v1/pre-trade",
+      "schema_fingerprint": "sha256:0834196b308e551709d633b203cce55ed031e5c55b80e5dc49a0a826bb10c346"
+    },
+    {
+      "accepts": [
+        {
+          "amount": "200000",
+          "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "maxTimeoutSeconds": 300,
+          "network": "eip155:8453",
+          "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+          "scheme": "exact"
+        },
+        {
+          "amount": "200000",
+          "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "maxTimeoutSeconds": 300,
+          "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+          "payTo": "FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ",
+          "scheme": "exact"
+        }
+      ],
+      "method": "POST",
+      "resource": "https://token-verdict-production.up.railway.app/v1/batch-verdict",
+      "schema_fingerprint": "sha256:1d57b1c1ff04c3b4ee1d02fd60804e6cd7eab9bb2cec0dbfe322b62c09109da9"
+    },
+    {
+      "accepts": null,
+      "method": "GET",
+      "resource": "https://token-verdict-production.up.railway.app/quote",
+      "schema_fingerprint": "sha256:06334c74179fe04003e14ffd129c8518b8c3380bfea5e3d1308f4f4888c8f6e2"
+    }
+  ],
+  "signature": "0x43e17382ef1bbca26963e6325ec3495de75dc2ba4f3dafb60ee60271cd87d1d161b75f7e9caae276bbf3e5eb7a3ac2e0a20dc40b2582a2fc6ed6c596521059b91b",
+  "signer": "0xa4f183a6799F0310FcCC545B07F2DcC960223de2",
+  "stall": "token-verdict",
+  "version": "2026-10-30.1"
+}
