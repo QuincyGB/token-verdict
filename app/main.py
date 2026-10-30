@@ -6,6 +6,7 @@ Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base;
         ABORT from token + wallet + allowance legs
         POST /v1/batch-verdict ($0.20 flat, Base) — 1-25 token screen
 Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
+             /.well-known/agent-card.json,
         /example (one verdict end to end, for humans)
         POST /v1/nudge (fleet-health nudge inbox — signed mail, not
         a product) and POST /v1/internal/nudges (owner read, gated
@@ -40,6 +41,7 @@ from .chain import is_address
 from .config import load_settings
 from .discovery import (
     OWNERSHIP_PROOFS,
+    agent_card,
     bazaar_batch_extension,
     bazaar_extension,
     bazaar_pre_trade_extension,
@@ -711,6 +713,11 @@ async def quote():
 @app.get("/.well-known/x402")
 async def well_known(request: Request):
     return JSONResponse(x402_manifest(settings, _public_base(request)))
+
+
+@app.get("/.well-known/agent-card.json")
+async def agent_card_document(request: Request):
+    return JSONResponse(agent_card(settings, _public_base(request)))
 
 
 @app.get("/skill.md", response_class=PlainTextResponse)
