@@ -827,7 +827,7 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
         # nudges (app/nudge.py; spec in x402-loop-kits). A top-level
         # extension, NOT a resource — inbound mail is free and the
         # priced route count does not move.
-        "extensions": {"nudge": nudge_extension(base_url)},
+        "extensions": {"nudge": nudge_extension(base_url), "mcp": dict(MCP_SERVER), "quickstart": dict(QUICKSTART)},
         "resources": [
             {
                 "resource": f"{base_url}/v1/verdict",
@@ -936,6 +936,29 @@ def _solana_note(settings: Settings) -> str:
 CARD_NAME = "Token Verdict"
 CARD_PROVIDER = {"organization": "Verdict Row", "url": "https://github.com/QuincyGB", "email": "patrol@verdictrow.com"}
 
+# The MCP server for this stall: a stdio wrapper (source-only — run by
+# the caller's own MCP host, not hosted here). Canonical reference is
+# the repo and its server.json manifest.
+MCP_SERVER = {
+    "name": "io.github.QuincyGB/token-verdict-mcp",
+    "title": "TokenVerdict MCP server",
+    "transport": "stdio",
+    "repository": "https://github.com/QuincyGB/token-verdict-mcp",
+    "manifest": "https://github.com/QuincyGB/token-verdict-mcp/blob/main/server.json",
+}
+
+# The Inspector Quickstart Pack: one page per language (curl /
+# Python / TypeScript), hosted canonically on StallRow at
+# /quickstart/<lang>. Every stall links the same canonical pages;
+# the URLs are absolute because the pack lives on StallRow's origin
+# no matter which stall's discovery doc a reader started from.
+QUICKSTART = {
+    "title": "Inspector Quickstart Pack",
+    "curl": "https://stall-row-production.up.railway.app/quickstart/curl",
+    "python": "https://stall-row-production.up.railway.app/quickstart/python",
+    "typescript": "https://stall-row-production.up.railway.app/quickstart/typescript",
+}
+
 
 def _skill_name(path: str) -> str:
     return path.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").title()
@@ -994,6 +1017,8 @@ def agent_card(settings: Settings, base_url: str) -> dict:
             "network": settings.network,
             "asset": USDC_ASSET,
         },
+        "mcp": dict(MCP_SERVER),
+        "quickstart": dict(QUICKSTART),
     }
 
 
@@ -1055,6 +1080,8 @@ market data, sanctions/poisoning breakdowns, takes). Same price either way.
 - `GET {base_url}/.well-known/x402` — machine-readable manifest
 - `GET {base_url}/.well-known/agent-card.json` — A2A agent card (skills mirror the priced routes)
 - `GET {base_url}/.well-known/stability-manifest.json` — signed pinned-route stability manifest (prices + schema fingerprints, pinned under an agent-wallet signature)
+- MCP server (stdio, run it in your own MCP host): https://github.com/QuincyGB/token-verdict-mcp — manifest (server.json): https://github.com/QuincyGB/token-verdict-mcp/blob/main/server.json — tools wrap the priced route (/v1/verdict)
+- Inspector Quickstart Pack (curl / Python / TypeScript): https://stall-row-production.up.railway.app/quickstart/curl · https://stall-row-production.up.railway.app/quickstart/python · https://stall-row-production.up.railway.app/quickstart/typescript — one-page integration path: pin Recheck + RouteVerdict, read the feed, register a watch, fund a pack
 
 ## Honest limits
 
@@ -1082,4 +1109,6 @@ Paid API: token risk verdicts. Price: {settings.price_usdc} USDC per call, x402 
 - GET {base_url}/.well-known/x402 — manifest
 - GET {base_url}/.well-known/agent-card.json — A2A agent card (skills mirror the priced routes)
 - GET {base_url}/.well-known/stability-manifest.json — signed pinned-route stability manifest (prices + schema fingerprints)
+- MCP server (stdio, run it in your own MCP host): https://github.com/QuincyGB/token-verdict-mcp — manifest (server.json): https://github.com/QuincyGB/token-verdict-mcp/blob/main/server.json — tools wrap the priced route (/v1/verdict)
+- Inspector Quickstart Pack (curl / Python / TypeScript): https://stall-row-production.up.railway.app/quickstart/curl · https://stall-row-production.up.railway.app/quickstart/python · https://stall-row-production.up.railway.app/quickstart/typescript — one-page integration path: pin Recheck + RouteVerdict, read the feed, register a watch, fund a pack
 """
