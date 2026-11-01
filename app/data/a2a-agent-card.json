@@ -1,0 +1,145 @@
+{
+  "capabilities": {
+    "pushNotifications": false,
+    "stateTransitionHistory": false,
+    "streaming": false
+  },
+  "contactEmail": "patrol@verdictrow.com",
+  "defaultInputModes": [
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
+  "description": "Send a token contract address, get a risk verdict. Returns SOLID / CAUTION / DANGER with a 0-100 score, six weighted market-structure signals and a written analyst take. Built for AI agents screening tokens — no API key, no signup, $0.02 USDC per call on Base or Solana. Use this when an agent is about to buy, swap, or route funds into a token and needs a fast risk screen first.",
+  "discovery_bundle": "https://token-verdict-production.up.railway.app/.well-known/verdict-row.json",
+  "documentationUrl": "https://token-verdict-production.up.railway.app/llms.txt",
+  "name": "Token Verdict",
+  "protocolVersion": "0.3.0",
+  "provider": {
+    "email": "patrol@verdictrow.com",
+    "organization": "Verdict Row",
+    "url": "https://github.com/QuincyGB"
+  },
+  "services": [
+    {
+      "amount": "20000",
+      "endpoint": "https://token-verdict-production.up.railway.app/v1/verdict",
+      "name": "/v1/verdict"
+    },
+    {
+      "amount": "50000",
+      "endpoint": "https://token-verdict-production.up.railway.app/v1/pre-trade",
+      "name": "/v1/pre-trade"
+    },
+    {
+      "amount": "200000",
+      "endpoint": "https://token-verdict-production.up.railway.app/v1/batch-verdict",
+      "name": "/v1/batch-verdict"
+    }
+  ],
+  "skills": [
+    {
+      "description": "Token risk verdict: SOLID / CAUTION / DANGER with score, six signals and a written take. Send a contract address. Use this when screening a token before buying, swapping, or routing funds into it.",
+      "id": "v1-verdict",
+      "inputModes": [
+        "application/json"
+      ],
+      "method": "POST",
+      "name": "Verdict",
+      "outputModes": [
+        "application/json"
+      ],
+      "price": {
+        "amount_units": "20000",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "display": "$0.02",
+        "network": "eip155:8453",
+        "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+        "protocol": "x402",
+        "scheme": "exact",
+        "usd": "0.02"
+      },
+      "tags": [
+        "tokens",
+        "defi",
+        "risk",
+        "research",
+        "agents"
+      ],
+      "url": "https://token-verdict-production.up.railway.app/v1/verdict"
+    },
+    {
+      "description": "Combined go/no-go before a trade: PROCEED / CAUTION / ABORT from the token's market verdict, the wallet's sanctions/age/poisoning check, and (with a spender) its ERC-20 approvals. Mode 'compact' returns the decision plus per-leg summaries. Use this when an agent is about to swap or pay and needs token + wallet + allowance risk in one call. Payable in USDC on Base or Solana.",
+      "id": "v1-pre-trade",
+      "inputModes": [
+        "application/json"
+      ],
+      "method": "POST",
+      "name": "Pre Trade",
+      "outputModes": [
+        "application/json"
+      ],
+      "price": {
+        "amount_units": "50000",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "display": "$0.05",
+        "network": "eip155:8453",
+        "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+        "protocol": "x402",
+        "scheme": "exact",
+        "usd": "0.05"
+      },
+      "tags": [
+        "tokens",
+        "wallets",
+        "defi",
+        "risk",
+        "pre-trade",
+        "agents"
+      ],
+      "url": "https://token-verdict-production.up.railway.app/v1/pre-trade"
+    },
+    {
+      "description": "Screen 1-25 Base tokens in one flat-fee call: SOLID / CAUTION / DANGER verdicts with scores, riskiest first, plus summary counts; unfetchable tokens return UNKNOWN with a reason. Mode 'compact' returns verdict/score and counts only. Use this when screening tokens before trading. Screening the same feed on a schedule? Pair this with StallRow Recheck (stall-row-production.up.railway.app/v1/recheck) to watch the endpoints you depend on for price/payTo/schema changes between screens. Payable in USDC on Base or Solana.",
+      "id": "v1-batch-verdict",
+      "inputModes": [
+        "application/json"
+      ],
+      "method": "POST",
+      "name": "Batch Verdict",
+      "outputModes": [
+        "application/json"
+      ],
+      "price": {
+        "amount_units": "200000",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "display": "$0.20",
+        "network": "eip155:8453",
+        "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+        "protocol": "x402",
+        "scheme": "exact",
+        "usd": "0.2"
+      },
+      "tags": [
+        "tokens",
+        "batch",
+        "defi",
+        "risk",
+        "screening",
+        "agents"
+      ],
+      "url": "https://token-verdict-production.up.railway.app/v1/batch-verdict"
+    }
+  ],
+  "url": "https://token-verdict-production.up.railway.app",
+  "version": "1.0.0",
+  "x402": {
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "discovery": "https://token-verdict-production.up.railway.app/.well-known/x402",
+    "network": "eip155:8453",
+    "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+    "scheme": "exact",
+    "version": 2
+  }
+}
