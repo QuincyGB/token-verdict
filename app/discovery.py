@@ -841,7 +841,7 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                     "Use this when screening a token before buying, swapping, "
                     "or routing funds into it."
                 ),
-                "tags": ["tokens", "defi", "risk", "research", "agents"],
+                "tags": ["tokens", "defi", "risk", "research", "agents", "token-risk", "pre-trade", "screening"],
                 "accepts": accepts,
                 "inputSchema": VERDICT_INPUT_SCHEMA,
                 "outputSchema": VERDICT_OUTPUT_SCHEMA,
@@ -866,7 +866,7 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                         else ""
                     )
                 ),
-                "tags": ["tokens", "wallets", "defi", "risk", "pre-trade", "agents"],
+                "tags": ["tokens", "wallets", "defi", "risk", "pre-trade", "agents", "pre-trade-guard", "payto", "wallet-risk"],
                 "accepts": _accepts_for(settings, settings.pre_trade_price_usdc),
                 "inputSchema": PRE_TRADE_INPUT_SCHEMA,
                 "outputSchema": PRE_TRADE_OUTPUT_SCHEMA,
@@ -894,7 +894,7 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                         else ""
                     )
                 ),
-                "tags": ["tokens", "batch", "defi", "risk", "screening", "agents"],
+                "tags": ["tokens", "batch", "defi", "risk", "screening", "agents", "token-screening", "pre-trade"],
                 "accepts": _accepts_for(settings, settings.batch_verdict_price_usdc),
                 "inputSchema": BATCH_INPUT_SCHEMA,
                 "outputSchema": BATCH_OUTPUT_SCHEMA,
