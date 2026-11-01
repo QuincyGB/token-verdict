@@ -1,0 +1,400 @@
+# token-verdict — llms-full.txt (Verdict Row x402 fleet)
+
+Generated: 2026-11-01T00:23:00Z by Ren, Verdict Row Patrol — patrol@verdictrow.com from the fleet's canonical route registry and this stall's served discovery + OpenAPI documents (llms_full.py, fleet-checker).
+Contact: patrol@verdictrow.com
+
+Send a token contract address, get a risk verdict. Returns SOLID / CAUTION / DANGER with a 0-100 score, six weighted market-structure signals and a written analyst take. Built for AI agents screening tokens — no API key, no signup, $0.02 USDC per call on Base or Solana. Use this when an agent is about to buy, swap, or route funds into a token and needs a fast risk screen first.
+
+Payment terms (fleet-wide): x402, exact scheme, USDC. Fleet payTo: 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F. Base network: eip155:8453; Base USDC asset: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913. No API key and no signup — payment is the authentication. An unpaid call to a priced route returns HTTP 402 with the payment challenge; fields a source cannot supply come back marked unknown, never invented, and an upstream failure returns 502 so the payment does not settle.
+
+Worked examples in this file are FIXTURE values (the same worked examples this stall's OpenAPI document and free /sample payloads publish): real shapes, not live data. Buy the route for live results.
+
+## Priced routes on this stall (3)
+
+### POST https://token-verdict-production.up.railway.app/v1/verdict — $0.02
+
+Token risk verdict: SOLID / CAUTION / DANGER with score, six signals and a written take. Send a contract address. Use this when screening a token before buying, swapping, or routing funds into it.
+
+Price: $0.02 (20000 USDC atomic units on Base).
+Accepts: scheme exact, network eip155:8453, amount 20000 units, asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, payTo 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F, maxTimeoutSeconds 300 | scheme exact, network solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp, amount 20000 units, asset EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v, payTo FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ, maxTimeoutSeconds 300
+Tags: tokens, defi, risk, research, agents
+Input shape: type object; fields: address (string, required), chain (string)
+Output shape: type object; fields: market (object, required), score (number, required), signals (array, required), take (string, required), token (object, required), verdict (string, required)
+
+Worked request example (fixture):
+```json
+{
+  "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+  "chain": "base"
+}
+```
+
+Worked response example (fixture):
+```json
+{
+  "market": {
+    "dex": "uniswap",
+    "liquidity_usd": 259106,
+    "pair_url": "https://dexscreener.com/base/0x2821d96b5fc81aec3763340b375a846a89a3ec1b",
+    "price_change_24h_pct": 0.55,
+    "price_usd": "0.0003238",
+    "txns_24h": {
+      "buys": 1,
+      "sells": 2
+    },
+    "volume_24h_usd": 0.01
+  },
+  "score": 35.0,
+  "signals": [
+    {
+      "detail": "Deep liquidity ($259,106) \u2014 absorbs real selling.",
+      "name": "Liquidity depth",
+      "score": 5,
+      "weight": 3
+    },
+    {
+      "detail": "24h volume is $0 \u2014 effectively no market.",
+      "name": "Volume churn",
+      "score": 60,
+      "weight": 2
+    },
+    {
+      "detail": "67% sells vs 33% buys \u2014 clear distribution.",
+      "name": "Sell pressure",
+      "score": 60,
+      "weight": 2
+    },
+    {
+      "detail": "24h price action (+0.6%) is unremarkable.",
+      "name": "Price action",
+      "score": 10,
+      "weight": 2
+    },
+    {
+      "detail": "3 transactions in 24h \u2014 a handful of wallets is the market.",
+      "name": "Trader breadth",
+      "score": 70,
+      "weight": 1
+    },
+    {
+      "detail": "Pair has meaningful history.",
+      "name": "Pair age",
+      "score": 5,
+      "weight": 1
+    }
+  ],
+  "take": "BASE (Base King) trades at $0.0003238 on uniswap; $259.1k liquidity. Trading has stopped \u2014 $0 volume across 3 transactions in 24h \u2014 a dormant book, not a live market. Verdict: CAUTION \u2014 small size at most. Not checked: honeypot simulation and holder concentration \u2014 market structure only.",
+  "token": {
+    "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+    "chain": "base",
+    "name": "Base King",
+    "symbol": "BASE"
+  },
+  "verdict": "CAUTION"
+}
+```
+
+Free sample of this route's response shape: https://token-verdict-production.up.railway.app/sample/verdict (source: schema-example; labelled in-band sample=true, live=false).
+
+### POST https://token-verdict-production.up.railway.app/v1/pre-trade — $0.05
+
+Combined go/no-go before a trade: PROCEED / CAUTION / ABORT from the token's market verdict, the wallet's sanctions/age/poisoning check, and (with a spender) its ERC-20 approvals. Mode 'compact' returns the decision plus per-leg summaries. Use this when an agent is about to swap or pay and needs token + wallet + allowance risk in one call. Payable in USDC on Base or Solana.
+
+Price: $0.05 (50000 USDC atomic units on Base).
+Accepts: scheme exact, network eip155:8453, amount 50000 units, asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, payTo 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F, maxTimeoutSeconds 300 | scheme exact, network solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp, amount 50000 units, asset EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v, payTo FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ, maxTimeoutSeconds 300
+Tags: tokens, wallets, defi, risk, pre-trade, agents
+Input shape: type object; fields: chain (string), mode (string), spender (string|null), token_address (string, required), wallet_address (string|null)
+Output shape: type object; fields: abort_reasons (array), degraded (boolean, required), legs (any, required), mode (string), not_checked (string, required), score (number, required), spender (string|null), token (object), verdict (string, required), wallet (string|null), worst_leg (string|null)
+
+Worked request example (fixture):
+```json
+{
+  "chain": "base",
+  "spender": null,
+  "token_address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+  "wallet_address": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F"
+}
+```
+
+Worked response example (fixture):
+```json
+{
+  "abort_reasons": [],
+  "degraded": false,
+  "legs": {
+    "token": {
+      "market": {
+        "dex": "uniswap",
+        "liquidity_usd": 259106,
+        "pair_url": "https://dexscreener.com/base/0x2821d96b5fc81aec3763340b375a846a89a3ec1b",
+        "price_change_24h_pct": 0.55,
+        "price_usd": "0.0003238",
+        "txns_24h": {
+          "buys": 1,
+          "sells": 2
+        },
+        "volume_24h_usd": 0.01
+      },
+      "risk_score": 35.0,
+      "signals": [
+        {
+          "detail": "Deep liquidity ($259,106) \u2014 absorbs real selling.",
+          "name": "Liquidity depth",
+          "score": 5,
+          "weight": 3
+        },
+        {
+          "detail": "24h volume is $0 \u2014 effectively no market.",
+          "name": "Volume churn",
+          "score": 60,
+          "weight": 2
+        },
+        {
+          "detail": "67% sells vs 33% buys \u2014 clear distribution.",
+          "name": "Sell pressure",
+          "score": 60,
+          "weight": 2
+        },
+        {
+          "detail": "24h price action (+0.6%) is unremarkable.",
+          "name": "Price action",
+          "score": 10,
+          "weight": 2
+        },
+        {
+          "detail": "3 transactions in 24h \u2014 a handful of wallets is the market.",
+          "name": "Trader breadth",
+          "score": 70,
+          "weight": 1
+        },
+        {
+          "detail": "Pair has meaningful history.",
+          "name": "Pair age",
+          "score": 5,
+          "weight": 1
+        }
+      ],
+      "status": "ok",
+      "take": "BASE (Base King) trades at $0.0003238 on uniswap; $259.1k liquidity. Trading has stopped \u2014 $0 volume across 3 transactions in 24h \u2014 a dormant book, not a live market. Verdict: CAUTION \u2014 small size at most. Not checked: honeypot simulation and holder concentration \u2014 market structure only.",
+      "token": {
+        "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+        "chain": "base",
+        "name": "Base King",
+        "symbol": "BASE"
+      },
+      "verdict": "CAUTION"
+    },
+    "wallet": {
+      "address": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
+      "first_activity": "2025-11-02T14:03:11+00:00",
+      "not_checked": "Not checked: the person or entity behind the address.",
+      "outgoing_tx_count_nonce": 137,
+      "poisoning": {
+        "detail": "No zero-value lookalike transfers in the recent history sampled.",
+        "signals": [],
+        "status": "none_found"
+      },
+      "reasons": [],
+      "risk_score": 0,
+      "sanctions": {
+        "detail": "Address does not appear in the bundled OFAC SDN digital-currency snapshot.",
+        "matched": false,
+        "snapshot_date": "2026-10-21",
+        "snapshot_entries": 91,
+        "snapshot_source": "https://www.treasury.gov/ofac/downloads/sdn.csv",
+        "status": "no_match"
+      },
+      "status": "ok",
+      "verdict": "SAFE",
+      "wallet_age_days": 357
+    }
+  },
+  "mode": "full",
+  "not_checked": "Not checked: contract honeypot simulation and holder concentration.",
+  "score": 35.0,
+  "spender": null,
+  "token": {
+    "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+    "chain": "base",
+    "name": "Base King",
+    "symbol": "BASE"
+  },
+  "verdict": "CAUTION",
+  "wallet": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F"
+}
+```
+
+Free sample of this route's response shape: https://token-verdict-production.up.railway.app/sample/pre-trade (source: schema-example; labelled in-band sample=true, live=false).
+
+### POST https://token-verdict-production.up.railway.app/v1/batch-verdict — $0.20
+
+Screen 1-25 Base tokens in one flat-fee call: SOLID / CAUTION / DANGER verdicts with scores, riskiest first, plus summary counts; unfetchable tokens return UNKNOWN with a reason. Mode 'compact' returns verdict/score and counts only. Use this when screening tokens before trading. Screening the same feed on a schedule? Pair this with StallRow Recheck (stall-row-production.up.railway.app/v1/recheck) to watch the endpoints you depend on for price/payTo/schema changes between screens. Payable in USDC on Base or Solana.
+
+Price: $0.20 (200000 USDC atomic units on Base).
+Accepts: scheme exact, network eip155:8453, amount 200000 units, asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, payTo 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F, maxTimeoutSeconds 300 | scheme exact, network solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp, amount 200000 units, asset EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v, payTo FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ, maxTimeoutSeconds 300
+Tags: tokens, batch, defi, risk, screening, agents
+Input shape: type object; fields: mode (string), token_addresses (array, required)
+Output shape: type object; fields: chain (string, required), evaluated_count (integer, required), mode (string), not_checked (string), requested_count (integer, required), results (array, required), summary (object, required), unique_count (integer, required), unknown_count (integer, required)
+
+Worked request example (fixture):
+```json
+{
+  "token_addresses": [
+    "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+    "0x000000000000000000000000000000000000dEaD"
+  ]
+}
+```
+
+Worked response example (fixture):
+```json
+{
+  "chain": "base",
+  "evaluated_count": 1,
+  "mode": "full",
+  "not_checked": "Per-token limits apply: market structure only.",
+  "requested_count": 2,
+  "results": [
+    {
+      "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+      "market": {
+        "dex": "uniswap",
+        "liquidity_usd": 259106,
+        "pair_url": "https://dexscreener.com/base/0x2821d96b5fc81aec3763340b375a846a89a3ec1b",
+        "price_change_24h_pct": 0.55,
+        "price_usd": "0.0003238",
+        "txns_24h": {
+          "buys": 1,
+          "sells": 2
+        },
+        "volume_24h_usd": 0.01
+      },
+      "reason": null,
+      "score": 35.0,
+      "signals": [
+        {
+          "detail": "Deep liquidity ($259,106) \u2014 absorbs real selling.",
+          "name": "Liquidity depth",
+          "score": 5,
+          "weight": 3
+        },
+        {
+          "detail": "24h volume is $0 \u2014 effectively no market.",
+          "name": "Volume churn",
+          "score": 60,
+          "weight": 2
+        },
+        {
+          "detail": "67% sells vs 33% buys \u2014 clear distribution.",
+          "name": "Sell pressure",
+          "score": 60,
+          "weight": 2
+        },
+        {
+          "detail": "24h price action (+0.6%) is unremarkable.",
+          "name": "Price action",
+          "score": 10,
+          "weight": 2
+        },
+        {
+          "detail": "3 transactions in 24h \u2014 a handful of wallets is the market.",
+          "name": "Trader breadth",
+          "score": 70,
+          "weight": 1
+        },
+        {
+          "detail": "Pair has meaningful history.",
+          "name": "Pair age",
+          "score": 5,
+          "weight": 1
+        }
+      ],
+      "status": "ok",
+      "take": "BASE (Base King) trades at $0.0003238 on uniswap; $259.1k liquidity. Trading has stopped \u2014 $0 volume across 3 transactions in 24h \u2014 a dormant book, not a live market. Verdict: CAUTION \u2014 small size at most. Not checked: honeypot simulation and holder concentration \u2014 market structure only.",
+      "token": {
+        "address": "0x2821d96B5FC81aEC3763340b375a846a89A3Ec1b",
+        "chain": "base",
+        "name": "Base King",
+        "symbol": "BASE"
+      },
+      "verdict": "CAUTION"
+    },
+    {
+      "address": "0x000000000000000000000000000000000000dEaD",
+      "market": null,
+      "reason": "No DEXScreener pair found for this token on base.",
+      "score": null,
+      "signals": [],
+      "status": "unknown",
+      "take": null,
+      "token": null,
+      "verdict": "UNKNOWN"
+    }
+  ],
+  "summary": {
+    "CAUTION": 1,
+    "DANGER": 0,
+    "SOLID": 0,
+    "UNKNOWN": 1
+  },
+  "unique_count": 2,
+  "unknown_count": 1
+}
+```
+
+Free sample of this route's response shape: https://token-verdict-production.up.railway.app/sample/batch-verdict (source: schema-example; labelled in-band sample=true, live=false).
+
+## Pack mechanics (fleet prepaid packs, sold on StallRow)
+
+Packs and passes are prepaid balances that replace per-call payment on their routes. Each entry below is a priced route in the canonical registry; its stated price and mechanics are the registry's own record of that route.
+
+### POST https://stall-row-production.up.railway.app/v1/recheck/pack — $1
+
+Recheck watch pack — the default for monitoring loops: one $1.00 payment buys 250 change-checks for ONE endpoint ($0.004 per check instead of $0.005), good for 90 days. Returns an unguessable pack id — spend credits via POST /v1/recheck (body pack_id or X-Recheck-Pack header); read the balance free at POST /v1/recheck/pack-balance, and an exhausted pack returns 402 rather than charging per call. Use this when anything checks the same endpoint more than ~3 times a week.
+
+### POST https://stall-row-production.up.railway.app/v1/toolkit/pack — $1
+
+Toolkit Pack — the prepaid form of the inspector toolkit: one $1.00 payment buys 125 checks spendable on Sign Reader, Score Book, or Guard in any mix ($0.008/check instead of the $0.01 singles), good for 90 days. Spend credits via POST /v1/sign-read, /v1/score-book, or /v1/guard (body pack_id or X-Toolkit-Pack header); read the balance free at POST /v1/toolkit/pack-balance. An exhausted pack returns 402 rather than charging per call. Use this when your agent runs the toolkit regularly.
+
+### POST https://stall-row-production.up.railway.app/v1/fleet-check/pack — $5
+
+Fleet Check pack — the standing form of Fleet Check: one $5.00 payment buys 100 sweep credits for ONE fixed fleet definition (resources and/or origins), good for 90 days. Sweeps run on your interval or on demand via POST /v1/fleet-check/run — one credit per sweep, never per route — diff against the last sweep, and POST failures and recoveries to your webhook (heartbeats optional); the latest table is free at POST /v1/fleet-check/status. Use this when your stalls should be watched continuously.
+
+### POST https://stall-row-production.up.railway.app/v1/fleet-pass — $5
+
+Fleet Pass — one prepaid balance for the whole fleet: one $5.00 payment buys a $5.00 balance that spends on any paid route across Token Verdict, RouteVerdict, ListSmith, StallRow and LockSmith, each call debited at that route's listed price (90 days). Send the pass id as the X-Fleet-Pass header; read the balance free at POST /v1/fleet-pass/balance. Use this when a loop calls more than one fleet service and wants one budget, not a payment per call.
+
+### POST https://stall-row-production.up.railway.app/v1/fleet-pass-20 — $20
+
+Fleet Pass v2 — the $20 working pass for agent frameworks: one $20.00 payment buys a $20.00 prepaid balance that spends on any paid route across Token Verdict, RouteVerdict, ListSmith, StallRow and LockSmith, each call debited at that route's listed price — no holder discounts (90 days). Send the pass id as the X-Fleet-Pass header; read the balance free at POST /v1/fleet-pass/balance. Use this when a framework loop calls the fleet often enough that a $5 pass would run dry mid-run.
+
+Spending a pack: send the pack id in the request body (pack_id) or the pack's header (X-Recheck-Pack for Recheck packs, X-Toolkit-Pack for Toolkit packs); each call debits one credit instead of a per-call payment. Spending a Fleet Pass: send the pass id as the X-Fleet-Pass header on any priced route across all five stalls; each call debits that route's listed price from the pass balance. Pack and pass balances are readable free from the holder reads named in each stall's llms.txt / skill.md (the id alone is the credential).
+
+## Recheck feed v2 + hash chain (StallRow)
+
+Feed: GET https://stall-row-production.up.railway.app/v1/recheck/feed — recent Recheck results as JSONL, newest first. Feed v2: append ?v=2&since_seq=N for the cursor mode (ascending): each line is an envelope (seq, record_id, schema_version, prev_hash, record_hash, record). seq is a monotonically increasing integer; record_hash is the lowercase hex sha256 of prev_hash + "\n" + the record's canonical JSON (JSON with sorted keys and compact separators), and the first record chains from prev_hash "genesis" — a poller advancing a since_seq cursor can prove nothing was silently dropped. Filters ?origin=, ?pay_to= and ?route= select a subset of the SAME chain (hashes are never rewritten, so seq gaps under a filter are the excluded records, not drops). History is append-only and never pruned; backfill forwards from ?since_seq=0 or backwards with ?before_seq=N (the floor is the X-Recheck-Feed-Earliest-Seq header). The full fingerprint specification is published at https://stall-row-production.up.railway.app/v1/recheck/fingerprint-spec exactly as implemented.
+
+## Watch, webhooks and corrections policy
+
+Webhook Watch: register free at POST https://stall-row-production.up.railway.app/v1/watch/register with a funded Recheck pack or Fleet Pass and a webhook URL — the service rechecks on your interval and POSTs BASELINE/CHANGED events to your webhook; watch_focus="schema" is Contract Watch (SCHEMA_CHANGED pushes on output-schema fingerprint change only, funded at the listed Recheck price per run from the same pack/pass — the Recheck route's registry price above is that price). Self-serve Recheck change webhooks (feed-wide, one URL, or one origin) register at POST https://stall-row-production.up.railway.app/v1/recheck/webhooks, signed with your own secret. Corrections policy: the corrections log at GET https://stall-row-production.up.railway.app/v1/recheck/corrections is append-only — amendments to history records are served beside the originals; originals are never mutated, and corrections live outside the feed hash chain.
+
+## Discovery bundle, cards and fleet links
+
+- This stall's discovery doc: https://token-verdict-production.up.railway.app/.well-known/x402
+- This stall's OpenAPI document: https://token-verdict-production.up.railway.app/openapi.json
+- Compact index: https://token-verdict-production.up.railway.app/llms.txt · skill doc: https://token-verdict-production.up.railway.app/skill.md · this file: https://token-verdict-production.up.railway.app/llms-full.txt
+- Free samples index: https://token-verdict-production.up.railway.app/samples
+- Agent card: https://token-verdict-production.up.railway.app/.well-known/agent-card.json · A2A agent card: https://token-verdict-production.up.railway.app/.well-known/a2a-agent-card.json
+- Fleet Discovery Bundle (signed index of all five stalls): https://token-verdict-production.up.railway.app/.well-known/verdict-row.json
+- Stability manifest: https://token-verdict-production.up.railway.app/.well-known/stability-manifest.json · gradeability report: https://token-verdict-production.up.railway.app/.well-known/gradeability-report.json
+- Fleet status: https://stall-row-production.up.railway.app/status (JSON: https://stall-row-production.up.railway.app/status.json) · Tools index: https://stall-row-production.up.railway.app/tools (JSON: https://stall-row-production.up.railway.app/tools.json)
+- Fleet changelog: https://stall-row-production.up.railway.app/changelog.atom (JSON: https://stall-row-production.up.railway.app/changelog.json)
+
+## MCP + SDK pointers
+
+- MCP server for this stall: TokenVerdict MCP server (io.github.QuincyGB/token-verdict-mcp, transport stdio) — repository: https://github.com/QuincyGB/token-verdict-mcp · manifest (server.json): https://github.com/QuincyGB/token-verdict-mcp/blob/main/server.json. Stdio: run it in your own MCP host; its tools wrap this stall's priced routes.
+- Inspector Quickstart Pack (Inspector Quickstart Pack): curl https://stall-row-production.up.railway.app/quickstart/curl · Python https://stall-row-production.up.railway.app/quickstart/python · TypeScript https://stall-row-production.up.railway.app/quickstart/typescript
+- Python SDK: package "verdict-row" on PyPI — https://pypi.org/project/verdict-row/ (status also tracked on the Tools index: https://stall-row-production.up.railway.app/tools).
+- Paying a route: use any x402 v2 client (official Python or TypeScript x402 SDKs) — read the 402 challenge, pay the exact accept, retry with the payment header. The worked examples above are the exact request/response shapes.
+
+— Ren, Verdict Row Patrol — patrol@verdictrow.com · contact patrol@verdictrow.com
