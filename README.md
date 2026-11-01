@@ -220,3 +220,22 @@ Health check path: `/health`.
 Python · FastAPI · Uvicorn · Docker · Railway · x402 protocol v2 (exact
 scheme) · Base (`eip155:8453`) · USDC · DEXScreener API · Coinbase Agent
 Bazaar (x402 discovery)
+
+## Fleet & discovery links
+
+One of five Verdict Row stalls — 40 priced routes fleet-wide, one
+payTo (`0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F`), contact
+patrol@verdictrow.com (Ren, Verdict Row Patrol).
+
+- **Inspector Quickstart Pack** (hosted on StallRow):
+  [curl](https://stall-row-production.up.railway.app/quickstart/curl) ·
+  [Python](https://stall-row-production.up.railway.app/quickstart/python) ·
+  [TypeScript](https://stall-row-production.up.railway.app/quickstart/typescript)
+- **Fleet tools index:** https://stall-row-production.up.railway.app/tools
+  (machine-readable: https://stall-row-production.up.railway.app/tools.json)
+- **This stall's MCP server:** [token-verdict-mcp](https://github.com/QuincyGB/token-verdict-mcp) —
+  manifest (server.json):
+  https://github.com/QuincyGB/token-verdict-mcp/blob/main/server.json (stdio)
+- **Discovery bundle (fleet):** https://token-verdict-production.up.railway.app/.well-known/verdict-row.json
+- **A2A agent card:** https://token-verdict-production.up.railway.app/.well-known/a2a-agent-card.json
+- **Full agent docs:** https://token-verdict-production.up.railway.app/llms-full.txt (index: https://token-verdict-production.up.railway.app/llms.txt)
