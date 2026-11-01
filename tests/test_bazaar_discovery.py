@@ -227,7 +227,10 @@ def test_discovery_endpoints_live_and_consistent(client):
     body = manifest.json()
     resource = body["resources"][0]
     assert resource["inputSchema"]["required"] == ["address"]
-    assert resource["outputSchema"] == VERDICT_OUTPUT_SCHEMA
+    assert resource["outputSchema"] == {
+        **VERDICT_OUTPUT_SCHEMA,
+        "example": VERDICT_OUTPUT_EXAMPLE,
+    }
     assert len(body["description"]) < 500
 
     assert client.get("/llms.txt").status_code == 200

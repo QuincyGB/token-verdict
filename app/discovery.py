@@ -6,6 +6,8 @@ live 402 responses, so they must stay consistent with main.py pricing.
 
 from __future__ import annotations
 
+import json
+
 from .config import Settings
 from .nudge import nudge_extension
 
@@ -843,8 +845,8 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                 ),
                 "tags": ["tokens", "defi", "risk", "research", "agents", "token-risk", "pre-trade", "screening"],
                 "accepts": accepts,
-                "inputSchema": VERDICT_INPUT_SCHEMA,
-                "outputSchema": VERDICT_OUTPUT_SCHEMA,
+                "inputSchema": {**VERDICT_INPUT_SCHEMA, "example": VERDICT_INPUT_EXAMPLE},
+                "outputSchema": {**VERDICT_OUTPUT_SCHEMA, "example": VERDICT_OUTPUT_EXAMPLE},
             },
             {
                 "resource": f"{base_url}/v1/pre-trade",
@@ -868,8 +870,14 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                 ),
                 "tags": ["tokens", "wallets", "defi", "risk", "pre-trade", "agents", "pre-trade-guard", "payto", "wallet-risk"],
                 "accepts": _accepts_for(settings, settings.pre_trade_price_usdc),
-                "inputSchema": PRE_TRADE_INPUT_SCHEMA,
-                "outputSchema": PRE_TRADE_OUTPUT_SCHEMA,
+                "inputSchema": {
+                    **PRE_TRADE_INPUT_SCHEMA,
+                    "example": PRE_TRADE_COMPACT_INPUT_EXAMPLE,
+                },
+                "outputSchema": {
+                    **PRE_TRADE_OUTPUT_SCHEMA,
+                    "example": PRE_TRADE_COMPACT_OUTPUT_EXAMPLE,
+                },
             },
             {
                 "resource": f"{base_url}/v1/batch-verdict",
@@ -896,8 +904,14 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                 ),
                 "tags": ["tokens", "batch", "defi", "risk", "screening", "agents", "token-screening", "pre-trade"],
                 "accepts": _accepts_for(settings, settings.batch_verdict_price_usdc),
-                "inputSchema": BATCH_INPUT_SCHEMA,
-                "outputSchema": BATCH_OUTPUT_SCHEMA,
+                "inputSchema": {
+                    **BATCH_INPUT_SCHEMA,
+                    "example": BATCH_COMPACT_INPUT_EXAMPLE,
+                },
+                "outputSchema": {
+                    **BATCH_OUTPUT_SCHEMA,
+                    "example": BATCH_COMPACT_OUTPUT_EXAMPLE,
+                },
             },
             {
                 "resource": f"{base_url}/quote",
@@ -1016,12 +1030,20 @@ def agent_card(settings: Settings, base_url: str) -> dict:
             (a for a in r.get("accepts") or [] if a.get("network") == settings.network),
             None,
         )
+        # A2A skill examples: the route's worked input example (the
+        # same constant the manifest embeds in its inputSchema and the
+        # Bazaar extension publishes), as a JSON string in a list —
+        # the shape the fleet's stall-row card uses.
+        input_example = (r.get("inputSchema") or {}).get("example")
         skills.append(
             {
                 "id": path.strip("/").replace("/", "-"),
                 "name": _skill_name(path),
                 "description": r["description"],
                 "tags": r.get("tags") or [],
+                "examples": (
+                    [json.dumps(input_example)] if input_example else []
+                ),
                 "inputModes": ["application/json"],
                 "outputModes": ["application/json"],
             }
