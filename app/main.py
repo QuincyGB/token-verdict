@@ -51,6 +51,7 @@ from .discovery import (
     x402_manifest,
 )
 from . import samples as samples_svc
+from .openapi_examples import add_worked_examples
 from . import nudge as nudge_svc
 from .nudge import NudgeStore, resolve_nudge_path
 from .pretrade import PreTradeUnavailable, run_pre_trade
@@ -236,6 +237,7 @@ def _openapi_with_ownership_proofs():
     if app.openapi_schema:
         return app.openapi_schema
     schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    add_worked_examples(schema)
     schema["x-discovery"] = {"ownershipProofs": OWNERSHIP_PROOFS}
     schema["x-agentcash-provenance"] = {"ownershipProofs": OWNERSHIP_PROOFS}
     app.openapi_schema = schema
