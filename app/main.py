@@ -152,6 +152,10 @@ def _accepts_for(price: str) -> list[PaymentOption]:
 
 _accepts = _accepts_for(settings.price_usdc)
 
+# Route descriptions are echoed into the x402 payment payload's
+# `resource` and schema-validated by the CDP facilitator at verify:
+# its description cap is 512 chars. Keep every description (incl. the
+# Solana clause below) under it — pinned by tests/test_description_cap.py.
 VERDICT_DESCRIPTION = (
     "Send a token contract address, get a risk verdict. Returns SOLID / "
     "CAUTION / DANGER with a 0-100 score, six weighted market-structure "
@@ -168,13 +172,13 @@ VERDICT_DESCRIPTION = (
 )
 
 PRE_TRADE_DESCRIPTION = (
-    "One combined go/no-go before an agent spends: PROCEED / CAUTION / "
+    "Go/no-go before an agent spends: PROCEED / CAUTION / "
     "ABORT from the token's market verdict, the counterparty wallet's "
     "sanctions, age and poisoning check, and — with a spender — its ERC-20 "
-    "approvals. A leg that cannot be evaluated returns unknown and caps "
-    "the verdict at CAUTION. Mode 'compact' returns the decision, the "
-    "worst leg, and one summary per leg. Use this when an agent is about "
-    "to swap, pay, or route funds and needs token + wallet risk in one call."
+    "approvals. An unevaluable leg returns unknown and caps the verdict "
+    "at CAUTION. 'compact' mode returns the decision, worst leg, and one "
+    "summary per leg. Use this when swapping, paying, or routing funds "
+    "and you need token + wallet risk in one call."
     + (
         " Payable in USDC on Base or Solana — same price on either rail."
         if settings.solana_enabled
@@ -185,11 +189,11 @@ PRE_TRADE_DESCRIPTION = (
 BATCH_DESCRIPTION = (
     "Screen up to 25 Base tokens in one flat-fee call: per-token SOLID / "
     "CAUTION / DANGER verdicts with scores and signals, sorted riskiest "
-    "first, plus summary counts; tokens that cannot be fetched return "
+    "first, plus counts; tokens that cannot be fetched return "
     "UNKNOWN with a reason, and if most of the batch fails the call fails "
-    "unsettled. Mode 'compact' returns per-token verdict and score plus "
-    "the counts only. Use this when an agent holds a list of candidate "
-    "tokens and needs the risky ones flagged before trading any of them."
+    "unsettled. 'compact' mode returns per-token verdict and score plus "
+    "the counts only. Use this when screening candidate tokens before "
+    "trading any of them."
     + (
         " Payable in USDC on Base or Solana — same price on either rail."
         if settings.solana_enabled
