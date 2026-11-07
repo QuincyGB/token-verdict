@@ -65,7 +65,10 @@
         "defi",
         "risk",
         "research",
-        "agents"
+        "agents",
+        "token-risk",
+        "pre-trade",
+        "screening"
       ],
       "url": "https://token-verdict-production.up.railway.app/v1/verdict"
     },
@@ -96,7 +99,10 @@
         "defi",
         "risk",
         "pre-trade",
-        "agents"
+        "agents",
+        "pre-trade-guard",
+        "payto",
+        "wallet-risk"
       ],
       "url": "https://token-verdict-production.up.railway.app/v1/pre-trade"
     },
@@ -127,7 +133,9 @@
         "defi",
         "risk",
         "screening",
-        "agents"
+        "agents",
+        "token-screening",
+        "pre-trade"
       ],
       "url": "https://token-verdict-production.up.railway.app/v1/batch-verdict"
     }

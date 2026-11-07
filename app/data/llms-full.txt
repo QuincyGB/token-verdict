@@ -1,6 +1,6 @@
 # token-verdict — llms-full.txt (Verdict Row x402 fleet)
 
-Generated: 2026-11-01T00:23:00Z by Ren, Verdict Row Patrol — patrol@verdictrow.com from the fleet's canonical route registry and this stall's served discovery + OpenAPI documents (llms_full.py, fleet-checker).
+Generated: 2026-11-07T15:40:22Z by Ren, Verdict Row Patrol — patrol@verdictrow.com from the fleet's canonical route registry and this stall's served discovery + OpenAPI documents (llms_full.py, fleet-checker).
 Contact: patrol@verdictrow.com
 
 Send a token contract address, get a risk verdict. Returns SOLID / CAUTION / DANGER with a 0-100 score, six weighted market-structure signals and a written analyst take. Built for AI agents screening tokens — no API key, no signup, $0.02 USDC per call on Base or Solana. Use this when an agent is about to buy, swap, or route funds into a token and needs a fast risk screen first.
@@ -17,7 +17,7 @@ Token risk verdict: SOLID / CAUTION / DANGER with score, six signals and a writt
 
 Price: $0.02 (20000 USDC atomic units on Base).
 Accepts: scheme exact, network eip155:8453, amount 20000 units, asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, payTo 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F, maxTimeoutSeconds 300 | scheme exact, network solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp, amount 20000 units, asset EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v, payTo FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ, maxTimeoutSeconds 300
-Tags: tokens, defi, risk, research, agents
+Tags: tokens, defi, risk, research, agents, token-risk, pre-trade, screening
 Input shape: type object; fields: address (string, required), chain (string)
 Output shape: type object; fields: market (object, required), score (number, required), signals (array, required), take (string, required), token (object, required), verdict (string, required)
 
@@ -102,7 +102,7 @@ Combined go/no-go before a trade: PROCEED / CAUTION / ABORT from the token's mar
 
 Price: $0.05 (50000 USDC atomic units on Base).
 Accepts: scheme exact, network eip155:8453, amount 50000 units, asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, payTo 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F, maxTimeoutSeconds 300 | scheme exact, network solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp, amount 50000 units, asset EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v, payTo FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ, maxTimeoutSeconds 300
-Tags: tokens, wallets, defi, risk, pre-trade, agents
+Tags: tokens, wallets, defi, risk, pre-trade, agents, pre-trade-guard, payto, wallet-risk
 Input shape: type object; fields: chain (string), mode (string), spender (string|null), token_address (string, required), wallet_address (string|null)
 Output shape: type object; fields: abort_reasons (array), degraded (boolean, required), legs (any, required), mode (string), not_checked (string, required), score (number, required), spender (string|null), token (object), verdict (string, required), wallet (string|null), worst_leg (string|null)
 
@@ -232,7 +232,7 @@ Screen 1-25 Base tokens in one flat-fee call: SOLID / CAUTION / DANGER verdicts 
 
 Price: $0.20 (200000 USDC atomic units on Base).
 Accepts: scheme exact, network eip155:8453, amount 200000 units, asset 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913, payTo 0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F, maxTimeoutSeconds 300 | scheme exact, network solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp, amount 200000 units, asset EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v, payTo FeyyAfoCbn1psQ6x8gxN8YQbXZVpTSibZwP6mkXckXUJ, maxTimeoutSeconds 300
-Tags: tokens, batch, defi, risk, screening, agents
+Tags: tokens, batch, defi, risk, screening, agents, token-screening, pre-trade
 Input shape: type object; fields: mode (string), token_addresses (array, required)
 Output shape: type object; fields: chain (string, required), evaluated_count (integer, required), mode (string), not_checked (string), requested_count (integer, required), results (array, required), summary (object, required), unique_count (integer, required), unknown_count (integer, required)
 
@@ -354,7 +354,7 @@ Recheck watch pack — the default for monitoring loops: one $1.00 payment buys 
 
 ### POST https://stall-row-production.up.railway.app/v1/toolkit/pack — $1
 
-Toolkit Pack — the prepaid form of the inspector toolkit: one $1.00 payment buys 125 checks spendable on Sign Reader, Score Book, or Guard in any mix ($0.008/check instead of the $0.01 singles), good for 90 days. Spend credits via POST /v1/sign-read, /v1/score-book, or /v1/guard (body pack_id or X-Toolkit-Pack header); read the balance free at POST /v1/toolkit/pack-balance. An exhausted pack returns 402 rather than charging per call. Use this when your agent runs the toolkit regularly.
+Toolkit Pack — one $1.00 payment buys 125 prepaid calls ($0.008 each instead of the $0.01 singles) spendable on Sign Reader, Score Book, Guard, Tube Search, Page to Markdown, or Video Details in any mix, good for 90 days. Spend via pack_id (body or X-Toolkit-Pack header) on those routes; read the balance free at POST /v1/toolkit/pack-balance. An exhausted pack returns 402 rather than charging per call. Use this when your agent runs these tools regularly.
 
 ### POST https://stall-row-production.up.railway.app/v1/fleet-check/pack — $5
 
