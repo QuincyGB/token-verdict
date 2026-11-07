@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 
 import app.ledger as ledger_mod
 import app.main as main
+from app import delivery_ledger as delivery_ledger_svc
 from app.fleet_pass import LEDGER_URL
 
 TOKEN = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
@@ -52,6 +53,16 @@ def _settled_client(monkeypatch):
     monkeypatch.setattr(main, "run_pre_trade", _fake_pre_trade)
     monkeypatch.setattr(main, "run_batch", _fake_batch)
     monkeypatch.setattr(ledger_mod, "record_verdict", lambda result: True)
+
+    # Fleet delivery-ledger recording (2026-11-07) is stubbed like
+    # the accuracy ledger above; its own behavior is pinned by
+    # tests/test_delivery_ledger_recording.py.
+    async def _fake_record_delivery(payload):
+        return {"recorded": True}
+
+    monkeypatch.setattr(
+        delivery_ledger_svc, "record_delivery", _fake_record_delivery
+    )
 
     async def passthrough(request, call_next):
         return await call_next(request)
