@@ -886,16 +886,7 @@ def x402_manifest(settings: Settings, base_url: str) -> dict:
                 "scheme": "exact",
                 "mimeType": "application/json",
                 "description": (
-                    "Screen 1-25 Base tokens in one flat-fee call: SOLID / "
-                    "CAUTION / DANGER verdicts with scores, riskiest first, "
-                    "plus summary counts; unfetchable tokens return UNKNOWN "
-                    "with a reason. Mode 'compact' returns verdict/score and "
-                    "counts only. Use this when screening tokens before "
-                    "trading. Screening the same feed on a schedule? Pair "
-                    "this with StallRow Recheck "
-                    "(stall-row-production.up.railway.app/v1/recheck) to "
-                    "watch the endpoints you depend on for price/payTo/schema "
-                    "changes between screens."
+                    "Screen 1-25 Base tokens in one flat-fee call: SOLID / CAUTION / DANGER verdicts with scores, riskiest first, plus summary counts; unfetchable tokens return UNKNOWN with a reason. Mode 'compact' returns verdict/score and counts only. Use this when screening tokens before trading."
                     + (
                         " Payable in USDC on Base or Solana."
                         if settings.solana_enabled
