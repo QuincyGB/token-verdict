@@ -970,6 +970,12 @@ async def well_known(request: Request):
     return JSONResponse(x402_manifest(settings, _public_base(request)))
 
 
+@app.get("/.well-known/402index-verify.txt", response_class=PlainTextResponse)
+async def index402_verify():
+    # 402index domain-ownership verification: serves the hash of the claim token.
+    return "e0d8175112a4fbb56a314686135c8aa51ad36ca94e94f2813c228a4ab017770c"
+
+
 @app.get("/.well-known/agent-card.json")
 async def agent_card_document(request: Request):
     return JSONResponse(agent_card(settings, _public_base(request)))
