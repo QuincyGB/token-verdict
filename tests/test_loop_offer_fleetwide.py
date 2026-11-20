@@ -74,7 +74,7 @@ def _settled_client(monkeypatch):
 def _assert_block(body):
     block = body["verdict_row_loop"]
     offers = {o["id"]: o for o in block["offers"]}
-    assert offers["recheck_pack"]["price_usd"] == 1.0
+    assert offers["recheck_pack"]["price_usd"] == 0.10
     assert offers["fleet_pass"]["url"] == f"{LEDGER_URL}/v1/fleet-pass"
     # Static block only on this stall — no per-wallet section.
     assert "returning_payer" not in block
@@ -175,8 +175,8 @@ def test_unpaid_challenges_carry_no_block():
         assert accept["payTo"] == OWNER, path
     assert (VERDICT_UNITS, PRE_TRADE_UNITS, BATCH_UNITS) == (
         20000,
-        50000,
-        200000,
+        30000,
+        100000,
     )
 
 

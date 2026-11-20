@@ -353,8 +353,8 @@ def test_app_routes_advertise_solana_only_when_enabled(monkeypatch):
         # deploy; this file runs offline by design.)
         expected_price = {
             "POST /v1/verdict": "$0.02",
-            "POST /v1/pre-trade": "$0.05",
-            "POST /v1/batch-verdict": "$0.20",
+            "POST /v1/pre-trade": "$0.03",
+            "POST /v1/batch-verdict": "$0.10",
         }
         for route, price in expected_price.items():
             accepts = main_module.routes[route].accepts
@@ -380,8 +380,8 @@ def test_manifest_other_routes_advertise_both_networks_when_enabled(monkeypatch)
     batch = by_resource["https://example.test/v1/batch-verdict"]["accepts"]
     assert [a["network"] for a in pre] == [BASE_NETWORK, NETWORK]
     assert [a["network"] for a in batch] == [BASE_NETWORK, NETWORK]
-    assert pre[1]["amount"] == "50000" and pre[1]["asset"] == MINT and pre[1]["payTo"] == PAY_TO
-    assert batch[1]["amount"] == "200000" and batch[1]["asset"] == MINT and batch[1]["payTo"] == PAY_TO
+    assert pre[1]["amount"] == "30000" and pre[1]["asset"] == MINT and pre[1]["payTo"] == PAY_TO
+    assert batch[1]["amount"] == "100000" and batch[1]["asset"] == MINT and batch[1]["payTo"] == PAY_TO
 
     monkeypatch.delenv("SOLANA_RAIL_ENABLED", raising=False)
     manifest = x402_manifest(load_settings(), "https://example.test")

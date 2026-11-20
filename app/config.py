@@ -72,8 +72,8 @@ class Settings:
     fleet_internal_secret: str | None = None
     # /v1/pre-trade and /v1/batch-verdict prices (defaults ARE the spec
     # prices; env overrides exist for parity with X402_PRICE_USDC).
-    pre_trade_price_usdc: str = "$0.05"
-    batch_verdict_price_usdc: str = "$0.20"
+    pre_trade_price_usdc: str = "$0.03"
+    batch_verdict_price_usdc: str = "$0.10"
     # Base chain-read upstreams for the pre-trade legs (both free, no key).
     base_rpc_url: str = BASE_RPC_URL
     blockscout_base_url: str = BLOCKSCOUT_BASE_URL
@@ -142,9 +142,9 @@ def load_settings() -> Settings:
         solana_rpc_url=os.environ.get("SOLANA_RPC_URL", "").strip() or None,
         rapidapi_proxy_secret=rapidapi_proxy_secret,
         fleet_internal_secret=os.environ.get("FLEET_INTERNAL_SECRET", "").strip() or None,
-        pre_trade_price_usdc=os.environ.get("X402_PRICE_PRE_TRADE_USDC", "$0.05").strip(),
+        pre_trade_price_usdc=os.environ.get("X402_PRICE_PRE_TRADE_USDC", "$0.03").strip(),
         batch_verdict_price_usdc=os.environ.get(
-            "X402_PRICE_BATCH_VERDICT_USDC", "$0.20"
+            "X402_PRICE_BATCH_VERDICT_USDC", "$0.10"
         ).strip(),
         base_rpc_url=os.environ.get("BASE_RPC_URL", BASE_RPC_URL).strip(),
         blockscout_base_url=os.environ.get(

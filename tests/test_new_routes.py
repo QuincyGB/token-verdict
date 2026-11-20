@@ -1,8 +1,8 @@
 """HTTP + discovery pins for the two new routes:
-POST /v1/pre-trade ($0.05) and POST /v1/batch-verdict ($0.20 flat).
+POST /v1/pre-trade ($0.03) and POST /v1/batch-verdict ($0.10 flat).
 
 Unpaid calls must 402 with well-formed challenges carrying the exact
-prices (50000 / 200000 USDC units on Base, canonical asset, fleet
+prices (30000 / 100000 USDC units on Base, canonical asset, fleet
 payTo). Discovery surfaces (manifest, Bazaar extensions, /quote) must
 agree with the live challenges. Engine behaviour is pinned separately
 in test_pretrade_batch.py and test_wallet_legs.py; this file never
@@ -57,7 +57,7 @@ def test_pre_trade_unpaid_402_exact_price(client):
     accepts = _accepts(r)
     assert len(accepts) == 1  # Base-only route: no Solana accept
     a = accepts[0]
-    assert a["amount"] == "50000"
+    assert a["amount"] == "30000"
     assert a["asset"] == USDC_BASE
     assert a["network"] == "eip155:8453"
     assert a["payTo"] == PAY_TO
@@ -70,7 +70,7 @@ def test_batch_unpaid_402_exact_price(client):
     accepts = _accepts(r)
     assert len(accepts) == 1
     a = accepts[0]
-    assert a["amount"] == "200000"
+    assert a["amount"] == "100000"
     assert a["asset"] == USDC_BASE
     assert a["network"] == "eip155:8453"
     assert a["payTo"] == PAY_TO
@@ -119,15 +119,15 @@ def test_manifest_lists_new_routes_with_exact_amounts():
     by_url = {r["resource"]: r for r in manifest["resources"]}
 
     pre = by_url["https://example.test/v1/pre-trade"]
-    assert pre["price"] == "$0.05"
-    assert pre["accepts"][0]["amount"] == "50000"
+    assert pre["price"] == "$0.03"
+    assert pre["accepts"][0]["amount"] == "30000"
     assert pre["accepts"][0]["payTo"] == PAY_TO
     assert pre["accepts"][0]["asset"] == USDC_BASE
     assert len(pre["description"]) < 500 and "Use this when" in pre["description"]
 
     batch = by_url["https://example.test/v1/batch-verdict"]
-    assert batch["price"] == "$0.20"
-    assert batch["accepts"][0]["amount"] == "200000"
+    assert batch["price"] == "$0.10"
+    assert batch["accepts"][0]["amount"] == "100000"
     assert len(batch["description"]) < 500 and "Use this when" in batch["description"]
 
 
@@ -154,8 +154,8 @@ def test_quote_lists_all_paid_endpoints(client):
     endpoints = {e["endpoint"]: e["price"] for e in body["endpoints"]}
     assert endpoints == {
         "/v1/verdict": "$0.02",
-        "/v1/pre-trade": "$0.05",
-        "/v1/batch-verdict": "$0.20",
+        "/v1/pre-trade": "$0.03",
+        "/v1/batch-verdict": "$0.10",
     }
     # Pre-existing keys untouched.
     assert body["price"] == "$0.02" and body["payTo"] == PAY_TO

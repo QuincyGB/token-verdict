@@ -2,9 +2,9 @@
 
 Paid:   POST /v1/verdict   (USDC via x402 v2 "exact" scheme on Base;
         Solana mainnet rail too when SOLANA_RAIL_ENABLED is set)
-        POST /v1/pre-trade ($0.05, Base) — combined PROCEED / CAUTION /
+        POST /v1/pre-trade ($0.03, Base) — combined PROCEED / CAUTION /
         ABORT from token + wallet + allowance legs
-        POST /v1/batch-verdict ($0.20 flat, Base) — 1-25 token screen
+        POST /v1/batch-verdict ($0.10 flat, Base) — 1-25 token screen
 Free:   GET  /health, /quote, /.well-known/x402, /skill.md, /llms.txt,
              /.well-known/agent-card.json,
         /example (one verdict end to end, for humans)
@@ -657,10 +657,10 @@ payment, and the response.</p>
   <tr><th>Route</th><th>Price</th><th>Purpose</th></tr>
   <tr><td><code>POST /v1/verdict</code></td><td>$0.02</td>
       <td>Token risk verdict (paid, x402)</td></tr>
-  <tr><td><code>POST /v1/pre-trade</code></td><td>$0.05</td>
+  <tr><td><code>POST /v1/pre-trade</code></td><td>$0.03</td>
       <td>Combined PROCEED / CAUTION / ABORT before a trade — token +
       wallet + allowance legs (paid, x402, Base)</td></tr>
-  <tr><td><code>POST /v1/batch-verdict</code></td><td>$0.20</td>
+  <tr><td><code>POST /v1/batch-verdict</code></td><td>$0.10</td>
       <td>Screen 1–25 Base tokens in one call, riskiest first (paid, x402)</td></tr>
   <tr><td><code>GET /example</code></td><td>free</td>
       <td>One verdict end to end — worked example for humans</td></tr>

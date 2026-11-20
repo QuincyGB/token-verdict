@@ -82,7 +82,7 @@ healthy market, and the product refuses to call it one.
 
 ## Two more paid endpoints (added 2026-10-24)
 
-**`POST /v1/pre-trade` — $0.05, Base.** One combined go/no-go before a
+**`POST /v1/pre-trade` — $0.03, Base.** One combined go/no-go before a
 trade: **PROCEED / CAUTION / ABORT** from three legs — the token verdict
 above, a wallet leg (OFAC SDN snapshot exact-match, wallet age/activity,
 address-poisoning signals; ported from the sister service stall-row), and
@@ -93,7 +93,7 @@ score; token DANGER, wallet AVOID or a sanctions match hard-abort; a leg
 that cannot be evaluated returns `unknown` and caps the verdict at
 CAUTION; if no leg evaluates, the call fails 502 and no payment settles.
 
-**`POST /v1/batch-verdict` — $0.20 flat, Base.** Screen 1–25 token
+**`POST /v1/batch-verdict` — $0.10 flat, Base.** Screen 1–25 token
 addresses in one call: per-token verdicts sorted riskiest first plus
 summary counts. Duplicates are screened once (60s cache); a token that
 cannot be fetched returns `UNKNOWN` with a reason; if more than half

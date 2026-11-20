@@ -28,12 +28,12 @@
       "name": "/v1/verdict"
     },
     {
-      "amount": "50000",
+      "amount": "30000",
       "endpoint": "https://token-verdict-production.up.railway.app/v1/pre-trade",
       "name": "/v1/pre-trade"
     },
     {
-      "amount": "200000",
+      "amount": "100000",
       "endpoint": "https://token-verdict-production.up.railway.app/v1/batch-verdict",
       "name": "/v1/batch-verdict"
     }
@@ -84,14 +84,14 @@
         "application/json"
       ],
       "price": {
-        "amount_units": "50000",
+        "amount_units": "30000",
         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "display": "$0.05",
+        "display": "$0.03",
         "network": "eip155:8453",
         "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
         "protocol": "x402",
         "scheme": "exact",
-        "usd": "0.05"
+        "usd": "0.03"
       },
       "tags": [
         "tokens",
@@ -118,14 +118,14 @@
         "application/json"
       ],
       "price": {
-        "amount_units": "200000",
+        "amount_units": "100000",
         "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "display": "$0.20",
+        "display": "$0.10",
         "network": "eip155:8453",
         "payTo": "0x097f9685D1e0752bF8B02d61E5Ce9be7eA0FBA7F",
         "protocol": "x402",
         "scheme": "exact",
-        "usd": "0.2"
+        "usd": "0.1"
       },
       "tags": [
         "tokens",
